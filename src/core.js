@@ -10,10 +10,10 @@
 // ---------------------------------------------------------------------
 var firebaseConfig = {
   apiKey: "COLE_AQUI",
-  authDomain: "",
-  databaseURL: "",
-  projectId: "",
-  storageBucket: "",
+  authDomain: "painel-estoque-9ecf0.firebaseapp.com",
+  databaseURL: "https://painel-estoque-9ecf0-default-rtdb.firebaseio.com",
+  projectId: "painel-estoque-9ecf0",
+  storageBucket: "painel-estoque-9ecf0.firebasestorage.app",
   messagingSenderId: "",
   appId: ""
 };
