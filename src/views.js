@@ -42,7 +42,7 @@ function initUI(){
   });
   // filtros: re-renderiza a tabela ao digitar/alterar
   ['est-busca','est-cat','est-local','est-zerados','est-minimo','mov-busca','mov-tipo','mov-de','mov-ate','prod-busca','prod-cat','prod-status',
-   'ent-busca','ent-empresa','ent-de','ent-ate','emp-busca','emp-empresa','emp-status','rel-de','rel-ate','rel-empresa','rel-cat','rel-emp'].forEach(function(id){
+   'ent-busca','ent-empresa','ent-de','ent-ate','emp-busca','emp-empresa','emp-status','rel-de','rel-ate','rel-empresa','rel-cat'].forEach(function(id){
     var el = $('#' + id); if(!el) return;
     el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' || el.type === 'date' ? 'change' : 'input', function(){ renderView(curView); });
   });
@@ -205,7 +205,7 @@ function renderEstoque(){
   var totU = 0, totV = 0, totSku = 0;
   rows.forEach(function(p){ var s = saldoProduto(p._id, loc); totU += s; totV += s * (+p.custo || 0); totSku += tamanhosProduto(p._id).filter(function(k){ return saldoDe(p._id, k, loc) > 0; }).length; });
   $('#est-stats').innerHTML = statCard('Produtos listados', fmtN(rows.length)) + statCard('Itens (produto × tamanho)', fmtN(totSku)) + statCard('Unidades', fmtN(totU), 'teal') + statCard('Valor', fmtR(totV));
-  if(!rows.length){ $('#est-table').innerHTML = emptyState(vals(DB.produtos).length ? 'Nenhum produto com esses filtros.' : 'Nenhum produto cadastrado. Um administrador pode fazer a carga inicial em Configurações.'); return; }
+  if(!rows.length){ $('#est-table').innerHTML = emptyState(vals(DB.produtos).length ? 'Nenhum produto com esses filtros.' : 'Nenhum produto cadastrado. Cadastre em Produtos / EPIs e dê entrada no saldo.'); return; }
   $('#est-table').innerHTML = '<table><thead><tr><th>Produto</th><th>CA</th><th>Tamanhos / saldo</th><th class="num">Total</th><th class="num">Mínimo</th><th>Situação</th></tr></thead><tbody>' +
     rows.map(function(p){
       var s = saldoProduto(p._id, loc), ca = caStatus(p);
@@ -400,8 +400,6 @@ function renderCadastros(){
 var relData = null;
 function renderRelatorios(){
   var t = tabs.relatorios;
-  $('#rel-emp').style.display = t === 'ficha' ? '' : 'none';
-  ['rel-empresa','rel-cat'].forEach(function(id){ $('#' + id).style.display = t === 'ficha' ? 'none' : ''; });
   var de = $('#rel-de').value, ate = $('#rel-ate').value, emp = $('#rel-empresa').value, cat = $('#rel-cat').value;
   var movs = movsPeriodo(de, ate).filter(function(m){
     if(m.tipo !== 'entrega') return false;
@@ -421,7 +419,7 @@ function renderRelatorios(){
       var p = DB.produtos[r.pid] || {};
       return '<tr><td>'+esc(p.nome)+'</td><td>'+esc(p.categoria || '')+'</td><td class="mono">'+esc(tamLabel(r.tk))+'</td><td class="num">'+fmtN(r.qtd)+'</td><td class="num">'+(r.valor ? fmtR(r.valor) : '—')+'</td></tr>';
     }).join('') + '</tbody></table>' : emptyState('Nenhuma entrega no período.')) + '</div></div>';
-  } else if(t === 'empresa'){
+  } else {
     var ge = {};
     movs.forEach(function(m){ var e = DB.empregados[m.empregadoId] || {}; var k = e.empresaId || '_'; ge[k] = ge[k] || {empresa:k, qtd:0, valor:0, pessoas:{}}; ge[k].qtd += +m.qtd; ge[k].valor += (+m.qtd) * (+m.custoUnit || +(DB.produtos[m.pid] || {}).custo || 0); ge[k].pessoas[m.empregadoId] = 1; });
     var re = vals(ge).sort(function(a, b){ return b.qtd - a.qtd; });
@@ -432,10 +430,6 @@ function renderRelatorios(){
     }).join('') + '</div><div class="table-wrap"><table><thead><tr><th>Empresa</th><th class="num">Empregados atendidos</th><th class="num">Itens</th><th class="num">Valor</th><th class="num">Valor / empregado</th></tr></thead><tbody>' + relData.rows.map(function(r){
       return '<tr><td>'+esc(r.Empresa)+'</td><td class="num">'+r.Empregados+'</td><td class="num">'+fmtN(r.Itens)+'</td><td class="num">'+(r.Valor ? fmtR(r.Valor) : '—')+'</td><td class="num">'+(r['Valor por empregado'] ? fmtR(r['Valor por empregado']) : '—')+'</td></tr>';
     }).join('') + '</tbody></table></div>' : emptyState('Nenhuma entrega no período.')) + '</div>';
-  } else {
-    var eid = findEmpByLabel($('#rel-emp').value);
-    if(!eid){ relData = null; h = '<div class="panel">' + emptyState('Escolha um empregado para ver a ficha de controle de EPI.') + '</div>'; }
-    else { relData = {nome:'ficha', empId: eid}; h = '<div class="panel" style="background:#fff;color:#000;padding:24px">' + fichaHtml(eid, de, ate) + '</div>'; }
   }
   $('#rel-body').innerHTML = h;
 }
@@ -445,7 +439,6 @@ function renderRelatorios(){
 // =====================================================================
 function renderConfig(){
   if(!can('admin')){ $('#cfg-body').innerHTML = '<div class="perm-note">Somente administradores.</div>'; return; }
-  var nProd = Object.keys(DB.produtos).length;
   var users = USER_ROLES.map(function(u){ var r = rolePermissions[u.role] || {}; return '<tr><td>'+esc(u.name)+'</td><td class="mono">'+esc(u.user)+'</td><td class="mono">'+esc(u.email)+'</td><td><span class="pill teal">'+esc(r.label || u.role)+'</span></td></tr>'; }).join('');
   var perms = Object.keys(rolePermissions).map(function(k){ var r = rolePermissions[k]; var ok = function(b){ return b ? '<span class="qty-in">✓</span>' : '<span style="color:var(--text-faint)">—</span>'; };
     return '<tr><td>'+r.label+'</td><td>'+ok(r.movimentar)+'</td><td>'+ok(r.entregar)+'</td><td>'+ok(r.produtos)+'</td><td>'+ok(r.empregados)+'</td><td>'+ok(r.cadastros)+'</td><td>'+ok(r.admin)+'</td></tr>'; }).join('');
@@ -453,8 +446,6 @@ function renderConfig(){
   $('#cfg-body').innerHTML =
     '<div class="cfg-grid">' +
       '<div class="cfg-card"><h3>Conexão</h3><p>' + (FB_ON ? 'Conectado ao Firebase (<span class="mono">'+esc(firebaseConfig.projectId)+'</span>), nó <span class="mono">'+DB_ROOT+'</span>.' : '<b style="color:var(--amber)">Modo demonstração.</b> Os dados ficam só neste navegador. Cole a configuração do Firebase no início do código (variável <span class="mono">firebaseConfig</span>) para usar com a equipe.') + '</p></div>' +
-      '<div class="cfg-card"><h3>Carga inicial do RSData</h3><p>Importa os '+Object.keys(SEED_RSDATA.produtos).length+' produtos ativos e os saldos do Almoxarifado Login Serv capturados do dataSEESMT ('+fmtN(SEED_RSDATA_TOTAL)+' unidades). Só pode ser feita com o cadastro de produtos vazio.</p>' +
-        '<button class="btn btn-primary" data-act="carga-inicial"'+(nProd ? ' disabled title="Já existem produtos cadastrados"' : '')+'>Fazer carga inicial</button></div>' +
       '<div class="cfg-card"><h3>Alertas</h3><p>Antecedência para avisar sobre vencimento de CA e troca de EPI.</p><div class="modal-grid">' +
         '<div class="modal-field"><label>CA vencendo (dias)</label><input type="number" id="cfg-diasCA" value="'+cfg('diasAlertaCA', 60)+'" min="1"></div>' +
         '<div class="modal-field"><label>Troca de EPI (dias)</label><input type="number" id="cfg-diasTroca" value="'+cfg('diasAlertaTroca', 15)+'" min="1"></div>' +
@@ -467,4 +458,3 @@ function renderConfig(){
     '<div class="panel" style="margin-top:16px"><div class="panel-head"><span class="panel-title">Log de auditoria</span><span class="mono" style="font-size:11px">últimos '+logs.length+' registros</span></div><div class="table-wrap">' + (logs.length ? '<table><thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Detalhe</th></tr></thead><tbody>' + logs.map(function(l){
       return '<tr><td class="mono">'+fmtDT(l.ts)+'</td><td>'+esc(l.usuario)+'</td><td>'+esc(l.acao)+'</td><td style="font-size:12px">'+esc(l.detalhe)+'</td></tr>'; }).join('') + '</tbody></table>' : emptyState('Sem registros.')) + '</div></div>';
 }
-var SEED_RSDATA_TOTAL = (function(){ var t = 0; Object.keys(SEED_RSDATA.saldos).forEach(function(p){ Object.keys(SEED_RSDATA.saldos[p]).forEach(function(k){ t += SEED_RSDATA.saldos[p][k]; }); }); return t; })();

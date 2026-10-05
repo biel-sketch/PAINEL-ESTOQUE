@@ -44,7 +44,6 @@ function handleAction(a, el){
     case 'print-termo': printTermo(id); break;
     case 'print-ficha': printFicha(id); break;
     case 'salvar-config': salvarConfig(); break;
-    case 'carga-inicial': cargaInicial(el); break;
     case 'backup': downloadBackup(); break;
     case 'importar-empregados': $('#file-import').value = ''; $('#file-import').click(); break;
     case 'export-estoque': exportEstoque(); break;
@@ -53,7 +52,7 @@ function handleAction(a, el){
     case 'export-entregas': exportEntregas(); break;
     case 'export-empregados': exportXlsx('empregados', vals(DB.empregados).sort(byName).map(function(e){ var t = e.tamanhos || {}; return {Nome:e.nome, Matricula:e.matricula || '', CPF:e.cpf || '', Empresa:nomeEmpresa(e.empresaId), Setor:e.setor || '', Cargo:nomeCargo(e.cargoId), Admissao:fmtD(e.admissao), Camisa:t.camisa || '', Calca:t.calca || '', Calcado:t.calcado || '', Luva:t.luva || '', Situacao:e.ativo === false ? 'Desligado' : 'Ativo', 'Itens em posse':itensEmPosse(e._id).reduce(function(s, x){ return s + x.aberto; }, 0)}; })); break;
     case 'rel-export': if(relData && relData.rows) exportXlsx(relData.nome, relData.rows); else toast('Nada para exportar nesta aba.', 'err'); break;
-    case 'rel-print': if(tabs.relatorios === 'ficha'){ if(relData && relData.empId) printFicha(relData.empId, $('#rel-de').value, $('#rel-ate').value); else toast('Escolha um empregado.', 'err'); } else printRelatorio(); break;
+    case 'rel-print': printRelatorio(); break;
     default:
       if(formHandlers[a]) formHandlers[a](el);
   }
@@ -565,25 +564,6 @@ formHandlers['salvar-cargo'] = function(btn){
 function salvarConfig(){
   var p = {'config/diasAlertaCA': Math.max(1, Math.floor(num($('#cfg-diasCA').value))), 'config/diasAlertaTroca': Math.max(1, Math.floor(num($('#cfg-diasTroca').value))), 'config/empresaTermo': $('#cfg-empresaTermo').value.trim()};
   save(p, 'Configurações alteradas', '').then(function(){ toast('Configurações salvas.'); });
-}
-function cargaInicial(btn){
-  if(!can('admin') || Object.keys(DB.produtos).length) return;
-  if(!confirmInline(btn, 'Confirmar carga')) return;
-  btn.disabled = true; btn.textContent = 'Importando...';
-  var p = {}, loc = vals(DB.locais).find(function(l){ return norm(l.nome) === 'almoxarifado login serv'; });
-  var locId = loc ? loc._id : 'almox';
-  if(!loc) p['locais/almox'] = {nome:'ALMOXARIFADO LOGIN SERV', descricao:'Importado do RSData'};
-  Object.keys(SEED_RSDATA.produtos).forEach(function(pid){ var x = Object.assign({}, SEED_RSDATA.produtos[pid]); x.criadoEm = nowTs(); p['produtos/' + pid] = x; });
-  var hoje = today();
-  Object.keys(SEED_RSDATA.saldos).forEach(function(pid){
-    Object.keys(SEED_RSDATA.saldos[pid]).forEach(function(t){
-      var tk = tamKey(t === 'UN' ? '' : t), q = SEED_RSDATA.saldos[pid][t];
-      p['saldos/' + pid + '/' + tk + '/' + locId] = q;
-      p['movimentos/' + store.key()] = movRecord({data:hoje, tipo:'carga_inicial', pid:pid, tk:tk, loc:locId, qtd:q, obs:'Saldo importado do RSData'});
-    });
-  });
-  if(!vals(DB.config).length){ p['config/diasAlertaCA'] = 60; p['config/diasAlertaTroca'] = 15; }
-  save(p, 'Carga inicial RSData', Object.keys(SEED_RSDATA.produtos).length + ' produtos, ' + SEED_RSDATA_TOTAL + ' unidades').then(function(){ toast('Carga inicial concluída.'); showView('estoque'); }).catch(function(e){ toast(e.message, 'err'); btn.disabled = false; });
 }
 function downloadBackup(){
   var data = {}; COLS.forEach(function(c){ data[c] = DB[c]; });

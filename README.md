@@ -9,9 +9,8 @@ Painel de estoque de EPIs, uniformes e materiais do Grupo Login Serv, no mesmo p
 - **Devoluções**: o item volta ao estoque ou é descartado.
 - **Empregados**: itens em posse, histórico, ficha de EPI e importação da planilha do RH.
 - **Validade e CA**: trocas vencidas ou próximas (pela vida útil), CA vencido ou a vencer, estoque mínimo.
-- **Relatórios**: consumo por período e por empresa, ficha de EPI, tudo exportável para Excel.
+- **Relatórios**: consumo por período e por empresa, exportáveis para Excel.
 - **Perfis**: Administrador, Almoxarife, Técnico de SST e Consulta, além de log de auditoria e backup.
-- **Carga inicial**: 115 produtos ativos e 2.291 unidades em saldo, capturados do RSData em 05/10/2026.
 
 ## Como ativar o Firebase
 1. Crie o projeto no Firebase Console e ative o **Authentication** (e-mail e senha) e o **Realtime Database**.

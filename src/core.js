@@ -36,9 +36,6 @@ var USER_ROLES = [
   // Exemplo: {user:'joao', email:'almoxarifado@loginserv.com.br', name:'João', role:'almoxarife'},
 ];
 
-// Carga inicial capturada do RSData (produtos ativos + saldos do Almoxarifado Login Serv)
-var SEED_RSDATA = {{SEED}};
-
 // =====================================================================
 // HELPERS
 // =====================================================================
@@ -82,7 +79,7 @@ var MOV_TIPOS = {
   transf_entrada:{label:'Transf. entrada',cls:'gray', sinal: 1},
   baixa:         {label:'Baixa',         cls:'red',   sinal:-1},
   devol_descarte:{label:'Devolução (descarte)', cls:'gray', sinal:0},
-  carga_inicial: {label:'Carga inicial', cls:'gray',  sinal: 1}
+  carga_inicial: {label:'Saldo inicial', cls:'gray',  sinal: 1}
 };
 var MOTIVOS_ENTREGA = ['Primeira entrega (admissão)','Troca por desgaste','Troca por vencimento da vida útil','Perda / extravio','Dano / quebra','Mudança de função','Outros'];
 var MOTIVOS_BAIXA = ['CA vencido','Produto danificado','Perda / extravio','Descarte de devolução','Validade do produto vencida','Outros'];
