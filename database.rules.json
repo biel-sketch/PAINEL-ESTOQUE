@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "painel-estoque": {
+      ".read": "auth != null && auth.token.email.matches(/.*@loginserv\\.com\\.br$/)",
+      ".write": "auth != null && auth.token.email.matches(/.*@loginserv\\.com\\.br$/)",
+      "movimentos": { ".indexOn": ["data", "pid", "empregadoId"] },
+      "entregas": { ".indexOn": ["data", "empregadoId"] },
+      "logs": { ".indexOn": ["ts"] }
+    }
+  }
+}

@@ -1,0 +1,248 @@
+<div class="login-screen" id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="{{LOGO}}" alt="Grupo Login Serv" class="login-logo-img">
+    </div>
+    <div class="login-title">Login Estoque</div>
+    <div class="login-subtitle">Entre com seu usuário e senha</div>
+    <div class="login-demo">Modo demonstração: o Firebase ainda não foi configurado. Use seu usuário e a senha <b>demo</b>. Os dados ficam só neste navegador.</div>
+    <div class="login-error" id="login-error">Usuário ou senha inválidos.</div>
+    <form id="login-form">
+      <div class="login-field">
+        <label for="login-user">Usuário</label>
+        <input type="text" id="login-user" placeholder="Seu nome..." autocomplete="username" required>
+      </div>
+      <div class="login-field">
+        <label for="login-pass">Senha</label>
+        <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="login-btn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+        Entrar
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="shell" id="app-shell">
+  <aside class="sidebar" id="app-sidebar">
+    <div class="brand"><img src="{{LOGO}}" alt="Grupo Login Serv" class="brand-logo-img"></div>
+    <button class="sidebar-toggle" id="sidebar-toggle-btn" title="Recolher menu">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+      <span class="nav-label">Recolher</span>
+    </button>
+    <nav class="nav" id="nav">
+      <div class="nav-item active" data-view="dashboard">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        <span class="nav-label">Visão Geral</span>
+      </div>
+      <div class="nav-section">Estoque</div>
+      <div class="nav-item" data-view="estoque">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>
+        <span class="nav-label">Posição de Estoque</span>
+      </div>
+      <div class="nav-item" data-view="movimentos">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 4v16M3 8l4-4 4 4"/><path d="M17 20V4M13 16l4 4 4-4"/></svg>
+        <span class="nav-label">Movimentações</span>
+      </div>
+      <div class="nav-item" data-view="produtos">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+        <span class="nav-label">Produtos / EPIs</span>
+      </div>
+      <div class="nav-section">EPIs</div>
+      <div class="nav-item" data-view="entregas">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>
+        <span class="nav-label">Entregas de EPI</span>
+      </div>
+      <div class="nav-item" data-view="empregados">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/><path d="M16 4a4 4 0 0 1 0 8M22 21c0-3-1.7-5.2-4.5-6.1"/></svg>
+        <span class="nav-label">Empregados</span>
+      </div>
+      <div class="nav-item" data-view="validade">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <span class="nav-label">Validade e CA</span>
+        <span class="nav-badge" id="badge-validade"></span>
+      </div>
+      <div class="nav-section">Gestão</div>
+      <div class="nav-item" data-view="relatorios">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 17v-3M12 17v-6M16 17v-2"/></svg>
+        <span class="nav-label">Relatórios</span>
+      </div>
+      <div class="nav-item" data-view="cadastros">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        <span class="nav-label">Cadastros</span>
+      </div>
+      <div class="nav-item" data-view="config" data-somente-admin="true" style="display:none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span class="nav-label">Configurações</span>
+      </div>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="sync-pill" id="sync-pill" style="margin-bottom:12px;justify-content:center;">
+        <span class="sync-dot"></span><span id="sync-label">Conectando...</span>
+      </div>
+      <div class="user-row">
+        <div class="avatar" id="role-avatar">—</div>
+        <div><div class="user-name" id="role-name">—</div><span class="role-pill" id="role-pill-label">—</span></div>
+      </div>
+      <button class="btn btn-ghost btn-block" id="btn-logout">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+        <span class="nav-label">Sair</span>
+      </button>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build {{BUILD}}</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="demo-banner">Modo demonstração: os dados estão salvos só neste navegador. Configure o Firebase para usar com a equipe.</div>
+
+    <!-- VISÃO GERAL -->
+    <section class="view active" id="view-dashboard">
+      <div class="topbar"><div class="page-title">Visão Geral</div><div class="page-date page-date-js"></div></div>
+      <div class="stats five" id="dash-stats"></div>
+      <div class="grid-2">
+        <div class="panel"><div class="panel-head"><span class="panel-title">Alertas</span><button class="btn btn-ghost btn-sm" data-go="validade">Ver tudo</button></div><div class="list" id="dash-alertas"></div></div>
+        <div class="panel"><div class="panel-head"><span class="panel-title">Mais consumidos — últimos 30 dias</span></div><div id="dash-top"></div></div>
+      </div>
+      <div class="panel"><div class="panel-head"><span class="panel-title">Últimas movimentações</span><button class="btn btn-ghost btn-sm" data-go="movimentos">Ver todas</button></div><div class="table-wrap" id="dash-movs"></div></div>
+    </section>
+
+    <!-- POSIÇÃO DE ESTOQUE -->
+    <section class="view" id="view-estoque">
+      <div class="topbar"><div class="page-title">Posição de Estoque</div><div class="page-date page-date-js"></div></div>
+      <div class="stats" id="est-stats"></div>
+      <div class="toolbar">
+        <input class="tb-input search" id="est-busca" placeholder="Buscar produto ou CA...">
+        <select class="tb-select" id="est-cat"><option value="">Todas as categorias</option><option>EPI</option><option>Uniforme</option><option>Material</option></select>
+        <select class="tb-select sel-locais" id="est-local" data-all="Todos os locais"></select>
+        <label class="tb-check"><input type="checkbox" id="est-zerados"> Mostrar zerados</label>
+        <label class="tb-check"><input type="checkbox" id="est-minimo"> Só abaixo do mínimo</label>
+        <span class="spacer"></span>
+        <button class="btn" data-act="export-estoque">Exportar Excel</button>
+        <button class="btn need-movimentar" data-act="nova-ajuste">Ajuste / Inventário</button>
+        <button class="btn btn-primary need-movimentar" data-act="nova-entrada">+ Entrada</button>
+      </div>
+      <div class="panel"><div class="table-wrap" id="est-table"></div></div>
+    </section>
+
+    <!-- MOVIMENTAÇÕES -->
+    <section class="view" id="view-movimentos">
+      <div class="topbar"><div class="page-title">Movimentações</div><div class="page-date page-date-js"></div></div>
+      <div class="toolbar">
+        <input class="tb-input search" id="mov-busca" placeholder="Buscar produto, empregado, NF...">
+        <select class="tb-select" id="mov-tipo"><option value="">Todos os tipos</option></select>
+        <label class="tb-check">De <input type="date" class="tb-input" id="mov-de"></label>
+        <label class="tb-check">até <input type="date" class="tb-input" id="mov-ate"></label>
+        <span class="spacer"></span>
+        <button class="btn" data-act="export-movs">Exportar Excel</button>
+        <button class="btn need-movimentar" data-act="nova-baixa">Baixa</button>
+        <button class="btn need-movimentar" data-act="nova-transferencia">Transferência</button>
+        <button class="btn need-movimentar" data-act="nova-ajuste">Ajuste</button>
+        <button class="btn btn-primary need-movimentar" data-act="nova-entrada">+ Entrada</button>
+      </div>
+      <div class="panel"><div class="table-wrap" id="mov-table"></div></div>
+    </section>
+
+    <!-- PRODUTOS -->
+    <section class="view" id="view-produtos">
+      <div class="topbar"><div class="page-title">Produtos / EPIs</div><div class="page-date page-date-js"></div></div>
+      <div class="toolbar">
+        <input class="tb-input search" id="prod-busca" placeholder="Buscar nome, CA, fabricante...">
+        <select class="tb-select" id="prod-cat"><option value="">Todas as categorias</option><option>EPI</option><option>Uniforme</option><option>Material</option></select>
+        <select class="tb-select" id="prod-status"><option value="ativos">Ativos</option><option value="inativos">Inativos</option><option value="">Todos</option></select>
+        <span class="spacer"></span>
+        <button class="btn" data-act="export-produtos">Exportar Excel</button>
+        <button class="btn btn-primary need-produtos" data-act="novo-produto">+ Novo produto</button>
+      </div>
+      <div class="panel"><div class="table-wrap" id="prod-table"></div></div>
+    </section>
+
+    <!-- ENTREGAS -->
+    <section class="view" id="view-entregas">
+      <div class="topbar"><div class="page-title">Entregas de EPI</div><div class="page-date page-date-js"></div></div>
+      <div class="toolbar">
+        <input class="tb-input search" id="ent-busca" placeholder="Buscar empregado ou item...">
+        <select class="tb-select sel-empresas" id="ent-empresa" data-all="Todas as empresas"></select>
+        <label class="tb-check">De <input type="date" class="tb-input" id="ent-de"></label>
+        <label class="tb-check">até <input type="date" class="tb-input" id="ent-ate"></label>
+        <span class="spacer"></span>
+        <button class="btn" data-act="export-entregas">Exportar Excel</button>
+        <button class="btn btn-primary need-entregar" data-act="nova-entrega">+ Nova entrega</button>
+      </div>
+      <div class="panel"><div class="table-wrap" id="ent-table"></div></div>
+    </section>
+
+    <!-- EMPREGADOS -->
+    <section class="view" id="view-empregados">
+      <div class="topbar"><div class="page-title">Empregados</div><div class="page-date page-date-js"></div></div>
+      <div class="toolbar">
+        <input class="tb-input search" id="emp-busca" placeholder="Buscar nome, matrícula, CPF...">
+        <select class="tb-select sel-empresas" id="emp-empresa" data-all="Todas as empresas"></select>
+        <select class="tb-select" id="emp-status"><option value="ativos">Ativos</option><option value="inativos">Desligados</option><option value="">Todos</option></select>
+        <span class="spacer"></span>
+        <button class="btn" data-act="export-empregados">Exportar Excel</button>
+        <button class="btn need-empregados" data-act="importar-empregados">Importar Excel</button>
+        <button class="btn btn-primary need-empregados" data-act="novo-empregado">+ Novo empregado</button>
+      </div>
+      <div class="panel"><div class="table-wrap" id="emp-table"></div></div>
+    </section>
+
+    <!-- VALIDADE E CA -->
+    <section class="view" id="view-validade">
+      <div class="topbar"><div class="page-title">Validade e CA</div><div class="page-date page-date-js"></div></div>
+      <div class="stats" id="val-stats"></div>
+      <div class="tabs" id="val-tabs">
+        <div class="tab active" data-tab="trocas">Trocas de EPI</div>
+        <div class="tab" data-tab="ca">Certificados de Aprovação</div>
+        <div class="tab" data-tab="minimo">Estoque mínimo</div>
+      </div>
+      <div class="panel"><div class="table-wrap" id="val-table"></div></div>
+    </section>
+
+    <!-- RELATÓRIOS -->
+    <section class="view" id="view-relatorios">
+      <div class="topbar"><div class="page-title">Relatórios</div><div class="page-date page-date-js"></div></div>
+      <div class="tabs" id="rel-tabs">
+        <div class="tab active" data-tab="consumo">Consumo por período</div>
+        <div class="tab" data-tab="empresa">Consumo por empresa</div>
+        <div class="tab" data-tab="ficha">Ficha de EPI</div>
+      </div>
+      <div class="toolbar" id="rel-filtros">
+        <label class="tb-check">De <input type="date" class="tb-input" id="rel-de"></label>
+        <label class="tb-check">até <input type="date" class="tb-input" id="rel-ate"></label>
+        <select class="tb-select sel-empresas" id="rel-empresa" data-all="Todas as empresas"></select>
+        <select class="tb-select" id="rel-cat"><option value="">Todas as categorias</option><option>EPI</option><option>Uniforme</option><option>Material</option></select>
+        <input class="tb-input" id="rel-emp" list="dl-empregados" placeholder="Empregado (para a ficha)..." style="min-width:260px;display:none;">
+        <span class="spacer"></span>
+        <button class="btn" data-act="rel-export">Exportar Excel</button>
+        <button class="btn" data-act="rel-print">Imprimir</button>
+      </div>
+      <div id="rel-body"></div>
+    </section>
+
+    <!-- CADASTROS -->
+    <section class="view" id="view-cadastros">
+      <div class="topbar"><div class="page-title">Cadastros</div><div class="page-date page-date-js"></div></div>
+      <div class="tabs" id="cad-tabs">
+        <div class="tab active" data-tab="empresas">Empresas / Unidades</div>
+        <div class="tab" data-tab="cargos">Cargos e kits de EPI</div>
+        <div class="tab" data-tab="locais">Locais de estoque</div>
+      </div>
+      <div class="toolbar"><span class="spacer"></span><button class="btn btn-primary" id="cad-novo" data-act="cad-novo">+ Novo</button></div>
+      <div class="panel"><div class="table-wrap" id="cad-table"></div></div>
+    </section>
+
+    <!-- CONFIGURAÇÕES -->
+    <section class="view" id="view-config">
+      <div class="topbar"><div class="page-title">Configurações <span style="font-size:11px;color:var(--text-faint);font-weight:400;">— restrito a administradores</span></div><div class="page-date page-date-js"></div></div>
+      <div id="cfg-body"></div>
+    </section>
+  </main>
+</div>
+
+<div class="modal-overlay" id="modal"><div class="modal-box" id="modal-box"></div></div>
+<div class="toast" id="toast"></div>
+<datalist id="dl-produtos"></datalist>
+<datalist id="dl-empregados"></datalist>
+<input type="file" id="file-import" accept=".xlsx,.xls,.csv" style="display:none">
+<div id="print-area"></div>
