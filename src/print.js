@@ -1,5 +1,5 @@
 // =====================================================================
-// IMPRESSÃO — Termo de recebimento e Ficha de controle de EPI (NR-6)
+// IMPRESSÃO — Termo de recebimento de EPI (NR-6)
 // =====================================================================
 function prHead(titulo){
   return '<div class="pr-head"><img src="'+LOGO_SRC+'" alt=""><div class="pr-title">'+esc(titulo)+'<div style="font-size:11px;font-weight:normal">'+esc(cfg('empresaTermo', 'Grupo Login Serv'))+'</div></div></div>';
@@ -23,22 +23,6 @@ function termoHtml(entId){
     '</tbody></table><div><b>Data da entrega:</b> '+fmtD(en.data)+' &nbsp; <b>Motivo:</b> '+esc(en.motivo || '')+(en.obs ? ' &nbsp; <b>Obs.:</b> ' + esc(en.obs) : '')+'</div>' +
     '<div class="pr-sign"><div>'+(en.assinatura ? '<img src="'+en.assinatura+'" alt="">' : '<br><br>')+esc(e.nome)+'<br>Empregado</div><div><br><br>'+esc(en.usuario || '')+'<br>Responsável pela entrega</div></div>';
 }
-function fichaHtml(empId, de, ate){
-  var e = DB.empregados[empId] || {};
-  var ents = vals(DB.entregas).filter(function(en){ return en.empregadoId === empId && !en.cancelada && (!de || en.data >= de) && (!ate || en.data <= ate); }).sort(function(a, b){ return a.data < b.data ? -1 : 1; });
-  var linhas = [];
-  ents.forEach(function(en){ (en.itens || []).forEach(function(i){ linhas.push({en:en, i:i}); }); });
-  var devols = vals(DB.movimentos).filter(function(m){ return m.empregadoId === empId && (m.tipo === 'devolucao' || m.tipo === 'devol_descarte'); });
-  return prHead('Ficha de Controle de EPI') + prEmpInfo(e) +
-    '<div class="pr-info"><div><b>Admissão</b>'+fmtD(e.admissao)+'</div><div><b>Período</b>'+(de || ate ? fmtD(de) + ' a ' + fmtD(ate) : 'Todo o histórico')+'</div><div><b>Emitida em</b>'+fmtD(today())+'</div></div>' +
-    '<div class="pr-text">' + TEXTO_NR6 + '</div>' +
-    '<table class="pr-table"><thead><tr><th>Data</th><th>Qtd</th><th>Descrição</th><th>Tam.</th><th>CA</th><th>Motivo</th><th>Devolução</th><th style="width:150px">Assinatura</th></tr></thead><tbody>' +
-    (linhas.length ? linhas.map(function(l){
-      var dv = devols.filter(function(m){ return m.entregaId === l.en._id && m.pid === l.i.pid; }).map(function(m){ return fmtD(m.data) + ' (' + m.qtd + ')'; }).join(', ');
-      return '<tr><td>'+fmtD(l.en.data)+'</td><td>'+l.i.qtd+'</td><td>'+esc(nomeProd(l.i.pid))+'</td><td>'+esc(tamLabel(l.i.tk))+'</td><td>'+esc(l.i.ca || '—')+'</td><td>'+esc(l.en.motivo || '')+'</td><td>'+(dv || '')+'</td><td style="height:34px">'+(l.en.assinatura ? '<img src="'+l.en.assinatura+'" style="max-height:30px">' : '')+'</td></tr>';
-    }).join('') : '<tr><td colspan="8" style="text-align:center">Nenhuma entrega no período.</td></tr>') +
-    '</tbody></table><div class="pr-sign"><div><br>'+esc(e.nome)+'<br>Empregado</div><div><br>Responsável — '+esc(cfg('empresaTermo', 'Grupo Login Serv'))+'</div></div>';
-}
 function doPrint(html){
   $('#print-area').innerHTML = html;
   var imgs = $$('#print-area img'), pend = imgs.filter(function(i){ return !i.complete; });
@@ -46,7 +30,6 @@ function doPrint(html){
   if(!pend.length) go(); else { var n = pend.length; pend.forEach(function(i){ i.onload = i.onerror = function(){ if(--n === 0) go(); }; }); setTimeout(go, 1500); }
 }
 function printTermo(entId){ doPrint(termoHtml(entId)); }
-function printFicha(empId, de, ate){ doPrint(fichaHtml(empId, de, ate)); }
 function printRelatorio(){
   if(!relData || !relData.rows || !relData.rows.length){ toast('Nada para imprimir.', 'err'); return; }
   var cols = Object.keys(relData.rows[0]);

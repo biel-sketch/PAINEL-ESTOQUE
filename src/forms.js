@@ -42,7 +42,6 @@ function handleAction(a, el){
     case 'editar-cargo': formCargo(id); break;
     case 'editar-local': formLocal(id); break;
     case 'print-termo': printTermo(id); break;
-    case 'print-ficha': printFicha(id); break;
     case 'salvar-config': salvarConfig(); break;
     case 'backup': downloadBackup(); break;
     case 'importar-empregados': $('#file-import').value = ''; $('#file-import').click(); break;
@@ -501,7 +500,7 @@ function fichaEmpregado(id){
     '<div class="section-label">Histórico de entregas</div>' + (hist.length ? '<table class="items-table"><thead><tr><th>Data</th><th>Itens</th><th>Motivo</th><th>Assinatura</th><th></th></tr></thead><tbody>' + hist.map(function(en){
       return '<tr><td class="mono">'+fmtD(en.data)+'</td><td style="font-size:12px">'+(en.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk !== 'UN' ? ' (' + i.tk + ')' : '')) + (i.devolvido ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">dev. ' + i.devolvido + '</span>' : ''); }).join('<br>')+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'</td><td>'+(en.assinatura ? '<span class="pill teal">Sim</span>' : '<span class="pill amber">Não</span>')+'</td><td><button class="btn btn-sm" data-act="print-termo" data-id="'+en._id+'">Termo</button></td></tr>';
     }).join('') + '</tbody></table>' : '<div style="color:var(--text-faint);font-size:12.5px">Nenhuma entrega registrada.</div>') +
-    '<div class="modal-actions"><button class="btn btn-ghost" data-act="fechar">Fechar</button><button class="btn" data-act="print-ficha" data-id="'+id+'">Imprimir ficha de EPI</button>' +
+    '<div class="modal-actions"><button class="btn btn-ghost" data-act="fechar">Fechar</button>' +
     (can('empregados') ? '<button class="btn" data-act="editar-empregado" data-id="'+id+'">Editar</button>' : '') +
     (can('entregar') && e.ativo !== false ? '<button class="btn btn-primary" data-act="nova-entrega" data-id="'+id+'">+ Nova entrega</button>' : '') + '</div>', 'xwide');
 }
