@@ -9,13 +9,14 @@
 // Enquanto apiKey estiver como "COLE_AQUI", o painel roda em MODO DEMONSTRAÇÃO (dados só no navegador).
 // ---------------------------------------------------------------------
 var firebaseConfig = {
-  apiKey: "COLE_AQUI",
+  apiKey: "AIzaSyASEKuo1T7TQFgTaELGdFoE1qpPiqHEf8M",
   authDomain: "painel-estoque-9ecf0.firebaseapp.com",
   databaseURL: "https://painel-estoque-9ecf0-default-rtdb.firebaseio.com",
   projectId: "painel-estoque-9ecf0",
   storageBucket: "painel-estoque-9ecf0.firebasestorage.app",
-  messagingSenderId: "",
-  appId: ""
+  messagingSenderId: "532805330196",
+  appId: "1:532805330196:web:576eb1fdc83c11abab4e01",
+  measurementId: "G-QZ67BYWN2N"
 };
 var DB_ROOT = 'painel-estoque';
 
