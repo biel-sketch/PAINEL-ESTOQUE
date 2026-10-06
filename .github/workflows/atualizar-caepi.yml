@@ -1,0 +1,152 @@
+name: Atualizar base de CAs (CAEPI)
+
+# Baixa todo dia a base oficial de Certificados de Aprovação do Ministério do Trabalho
+# e grava em ca/*.json para o painel consultar o CA automaticamente.
+on:
+  schedule:
+    - cron: "17 9 * * *"   # 06:17 em Brasília
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: caepi
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Baixar base do MTE (FTP)
+        run: |
+          URL="ftp://ftp.mtps.gov.br/portal/fiscalizacao/seguranca-e-saude-no-trabalho/caepi/tgg_export_caepi.zip"
+          curl -fsS --retry 5 --retry-delay 30 --retry-all-errors --connect-timeout 60 --max-time 900 -o /tmp/caepi.zip "$URL"
+          ls -lh /tmp/caepi.zip
+
+      - name: Converter para JSON
+        run: |
+          cat > /tmp/atualizar_caepi.py <<'PY'
+          #!/usr/bin/env python3
+          """Converte a base oficial de CAs do Ministério do Trabalho (CAEPI) em arquivos JSON
+          pequenos que o painel consulta direto do GitHub Pages.
+
+          Entrada: tgg_export_caepi.txt (de tgg_export_caepi.zip, FTP do MTE), separado por '|',
+          codificação Windows-1252, 19 colunas, com cabeçalho. Descrições podem ter quebras de linha.
+
+          Saída: ca/<n % 500>.json  -> {"<numero CA>": {...}}
+                 ca/meta.json       -> data da atualização e total de CAs
+          """
+          import datetime, json, os, re, sys, zipfile
+
+          SHARDS = 500
+          ANOS_VENCIDOS = 6          # mantém CAs vencidos há até N anos (estoque antigo ainda pode ter)
+          COLS = ['ca', 'validade', 'situacao', 'processo', 'cnpj', 'fabricante', 'natureza', 'equipamento',
+                  'descricao', 'marcacao', 'referencia', 'cor', 'aprovado', 'restricao', 'observacao',
+                  'cnpj_lab', 'laboratorio', 'laudo', 'norma']
+          NOVO_REGISTRO = re.compile(r'^\s*"?\d+"?\s*\|')
+
+
+          def iso(d):
+              d = (d or '').strip()
+              m = re.match(r'^(\d{2})/(\d{2})/(\d{4})', d)
+              if m:
+                  return f'{m.group(3)}-{m.group(2)}-{m.group(1)}'
+              m = re.match(r'^(\d{4})-(\d{2})-(\d{2})', d)
+              return m.group(0) if m else ''
+
+
+          def limpa(s, n):
+              s = re.sub(r'\s+', ' ', (s or '').replace('"', '')).strip()
+              return s if len(s) <= n else s[:n - 1].rstrip() + '…'
+
+
+          def registros(texto):
+              linhas = texto.splitlines()
+              atual = None
+              for ln in linhas[1:]:              # pula cabeçalho
+                  if NOVO_REGISTRO.match(ln):
+                      if atual is not None:
+                          yield atual
+                      atual = ln
+                  elif atual is not None:        # continuação de campo com quebra de linha
+                      atual += ' ' + ln
+              if atual is not None:
+                  yield atual
+
+
+          def main(entrada, saida):
+              if entrada.lower().endswith('.zip'):
+                  with zipfile.ZipFile(entrada) as z:
+                      nome = next(n for n in z.namelist() if n.lower().endswith('.txt') or n.lower().endswith('.csv'))
+                      bruto = z.read(nome)
+              else:
+                  bruto = open(entrada, 'rb').read()
+              try:
+                  texto = bruto.decode('utf-8')
+              except UnicodeDecodeError:
+                  texto = bruto.decode('cp1252', errors='replace')
+
+              corte = (datetime.date.today() - datetime.timedelta(days=365 * ANOS_VENCIDOS)).isoformat()
+              base, lidos = {}, 0
+              for linha in registros(texto):
+                  campos = linha.split('|')
+                  if len(campos) < 9:
+                      continue
+                  lidos += 1
+                  r = dict(zip(COLS, campos + [''] * (len(COLS) - len(campos))))
+                  ca = re.sub(r'\D', '', r['ca'])
+                  if not ca:
+                      continue
+                  ca = str(int(ca))
+                  val = iso(r['validade'])
+                  if val and val < corte:
+                      continue
+                  rec = {
+                      'v': val,
+                      's': limpa(r['situacao'], 30).upper(),
+                      'e': limpa(r['equipamento'], 160),
+                      'd': limpa(r['descricao'], 260),
+                      'f': limpa(r['fabricante'], 120),
+                      'c': re.sub(r'\D', '', r['cnpj'])[:14],
+                      'n': limpa(r['natureza'], 20),
+                      'r': limpa(r['referencia'], 120),
+                      'a': limpa(r['aprovado'], 220),
+                  }
+                  ant = base.get(ca)
+                  if ant is None or (rec['v'] or '') >= (ant['v'] or ''):
+                      base[ca] = rec
+
+              if len(base) < 1000:
+                  sys.exit(f'Base suspeita: só {len(base)} CAs válidos de {lidos} linhas lidas. Abortando para não apagar a base atual.')
+
+              os.makedirs(saida, exist_ok=True)
+              shards = {}
+              for ca, rec in base.items():
+                  shards.setdefault(int(ca) % SHARDS, {})[ca] = rec
+              for i in range(SHARDS):
+                  dados = dict(sorted(shards.get(i, {}).items(), key=lambda kv: int(kv[0])))
+                  with open(os.path.join(saida, f'{i}.json'), 'w', encoding='utf-8') as f:
+                      json.dump(dados, f, ensure_ascii=False, separators=(',', ':'))
+              with open(os.path.join(saida, 'meta.json'), 'w', encoding='utf-8') as f:
+                  json.dump({'atualizadoEm': datetime.date.today().isoformat(), 'total': len(base), 'shards': SHARDS,
+                             'fonte': 'CAEPI - Ministério do Trabalho e Emprego'}, f, ensure_ascii=False)
+              print(f'{lidos} linhas lidas, {len(base)} CAs gravados em {SHARDS} arquivos.')
+
+
+          if __name__ == '__main__':
+              main(sys.argv[1] if len(sys.argv) > 1 else 'tgg_export_caepi.zip', sys.argv[2] if len(sys.argv) > 2 else 'ca')
+          PY
+          python3 /tmp/atualizar_caepi.py /tmp/caepi.zip ca
+
+      - name: Publicar se mudou
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ca
+          if git diff --cached --quiet; then echo "Sem mudanças na base."; exit 0; fi
+          git commit -m "Base de CAs atualizada em $(date +%Y-%m-%d)"
+          git push
