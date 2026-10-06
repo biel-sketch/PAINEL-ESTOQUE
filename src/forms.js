@@ -223,6 +223,12 @@ formHandlers['salvar-baixa'] = function(btn){
 // =====================================================================
 // PRODUTO
 // =====================================================================
+var UNIDADES = [['UN','UN — unidade'],['PAR','PAR — par'],['CX','CX — caixa'],['PCT','PCT — pacote'],['KIT','KIT — kit'],['RL','RL — rolo'],['M','M — metro'],['L','L — litro'],['KG','KG — quilo']];
+function unidadesOpts(atual){
+  var u = (atual || '').toUpperCase(), l = UNIDADES.slice();
+  if(u && !l.some(function(o){ return o[0] === u; })) l.push([u, u]); // mantém unidade antiga digitada à mão
+  return l;
+}
 function formProduto(pid){
   if(!can('produtos')) return;
   var p = pid ? DB.produtos[pid] : {categoria:'EPI', unidade:'UN', ativo:true, vidaUtilDias:365};
@@ -230,7 +236,7 @@ function formProduto(pid){
   openModal('<div class="modal-title">'+(pid ? 'Editar produto' : 'Novo produto')+'</div><div class="modal-grid">' +
     field('Nome', '<input id="p-nome" value="'+esc(p.nome || '')+'">', 'full') +
     field('Categoria', '<select id="p-cat">'+optList([['EPI','EPI'],['Uniforme','Uniforme'],['Material','Material']], p.categoria)+'</select>') +
-    field('Unidade', '<input id="p-un" value="'+esc(p.unidade || 'UN')+'">') +
+    field('Unidade', '<select id="p-un">'+optList(unidadesOpts(p.unidade), (p.unidade || 'UN').toUpperCase())+'</select>') +
     field('Nº do CA', '<div style="display:flex;gap:8px"><input id="p-ca" value="'+esc(p.ca || '')+'" placeholder="Só para EPI" inputmode="numeric"><button class="btn btn-sm" data-act="consultar-ca" type="button">Consultar</button></div><input type="hidden" id="p-ca-sit" value="'+esc(p.caSituacao || '')+'">', '', 'Ao sair do campo, a validade é buscada na base oficial.') +
     field('Validade do CA', '<input type="date" id="p-val" value="'+esc(p.validadeCA || '')+'">') +
     '<div class="full" id="p-ca-info" style="grid-column:1/-1"></div>' +
@@ -251,7 +257,7 @@ formHandlers['salvar-produto'] = function(btn){
   if(dup) return formError('Já existe um produto com esse nome.');
   var tams = $('#p-tams').value.split(',').map(function(t){ return tamKey(t); }).filter(function(t){ return t && t !== 'UN'; });
   var rec = Object.assign({}, pid ? DB.produtos[pid] : {}, {
-    nome: nome, categoria: $('#p-cat').value, unidade: $('#p-un').value.trim() || 'UN', ca: $('#p-ca').value.trim(), validadeCA: $('#p-val').value,
+    nome: nome, categoria: $('#p-cat').value, unidade: $('#p-un').value || 'UN', ca: $('#p-ca').value.trim(), validadeCA: $('#p-val').value,
     fabricante: $('#p-fab').value.trim(), vidaUtilDias: Math.round(num($('#p-vu').value) * +$('#p-vuun').value), estoqueMinimo: Math.floor(num($('#p-min').value)),
     tamanhos: tams, custo: num($('#p-custo').value), ativo: $('#p-ativo').value === '1', atualizadoEm: nowTs(),
     caSituacao: $('#p-ca').value.trim() ? $('#p-ca-sit').value : ''
