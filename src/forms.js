@@ -231,8 +231,9 @@ function formProduto(pid){
     field('Nome', '<input id="p-nome" value="'+esc(p.nome || '')+'">', 'full') +
     field('Categoria', '<select id="p-cat">'+optList([['EPI','EPI'],['Uniforme','Uniforme'],['Material','Material']], p.categoria)+'</select>') +
     field('Unidade', '<input id="p-un" value="'+esc(p.unidade || 'UN')+'">') +
-    field('Nº do CA', '<input id="p-ca" value="'+esc(p.ca || '')+'" placeholder="Só para EPI">') +
+    field('Nº do CA', '<div style="display:flex;gap:8px"><input id="p-ca" value="'+esc(p.ca || '')+'" placeholder="Só para EPI" inputmode="numeric"><button class="btn btn-sm" data-act="consultar-ca" type="button">Consultar</button></div><input type="hidden" id="p-ca-sit" value="'+esc(p.caSituacao || '')+'">', '', 'Ao sair do campo, a validade é buscada na base oficial.') +
     field('Validade do CA', '<input type="date" id="p-val" value="'+esc(p.validadeCA || '')+'">') +
+    '<div class="full" id="p-ca-info" style="grid-column:1/-1"></div>' +
     field('Fabricante / marca', '<input id="p-fab" value="'+esc(p.fabricante || '')+'">', 'full') +
     field('Vida útil (troca)', '<div style="display:flex;gap:8px"><input type="number" id="p-vu" min="0" value="'+vuN+'" style="width:90px"><select id="p-vuun">'+optList([['1','dias'],['30','meses'],['365','anos']], String(vuUn))+'</select></div>', '', 'Usada para calcular a próxima troca.') +
     field('Estoque mínimo', '<input type="number" id="p-min" min="0" value="'+(p.estoqueMinimo || 0)+'">', '', 'Gera alerta quando o saldo total ficar abaixo.') +
@@ -240,8 +241,10 @@ function formProduto(pid){
     field('Custo médio (R$)', '<input id="p-custo" value="'+(p.custo ? String(p.custo).replace('.', ',') : '')+'">', '', 'Atualizado automaticamente nas entradas com custo.') +
     field('Situação', '<select id="p-ativo">'+optList([['1','Ativo'],['0','Inativo']], p.ativo === false ? '0' : '1')+'</select>') +
     '</div>' + modalActions('Salvar', 'salvar-produto', pid && can('admin') && !saldoProduto(pid) && !vals(DB.movimentos).some(function(m){ return m.pid === pid; }) ? '<button class="btn btn-danger" data-act="excluir-produto" data-id="'+pid+'" style="margin-right:auto">Excluir</button>' : '') + (pid ? '<input type="hidden" id="p-id" value="'+pid+'">' : ''));
+  wireCAProduto();
 }
 formHandlers['salvar-produto'] = function(btn){
+  if(($('#p-ca').value.trim()) !== ((DB.produtos[($('#p-id') || {}).value] || {}).ca || '') && !$('#p-ca-info').innerHTML) $('#p-ca-sit').value = '';
   var pid = ($('#p-id') || {}).value, nome = $('#p-nome').value.trim();
   if(!nome) return formError('Informe o nome.');
   var dup = vals(DB.produtos).find(function(x){ return x._id !== pid && norm(x.nome) === norm(nome); });
@@ -250,7 +253,8 @@ formHandlers['salvar-produto'] = function(btn){
   var rec = Object.assign({}, pid ? DB.produtos[pid] : {}, {
     nome: nome, categoria: $('#p-cat').value, unidade: $('#p-un').value.trim() || 'UN', ca: $('#p-ca').value.trim(), validadeCA: $('#p-val').value,
     fabricante: $('#p-fab').value.trim(), vidaUtilDias: Math.round(num($('#p-vu').value) * +$('#p-vuun').value), estoqueMinimo: Math.floor(num($('#p-min').value)),
-    tamanhos: tams, custo: num($('#p-custo').value), ativo: $('#p-ativo').value === '1', atualizadoEm: nowTs()
+    tamanhos: tams, custo: num($('#p-custo').value), ativo: $('#p-ativo').value === '1', atualizadoEm: nowTs(),
+    caSituacao: $('#p-ca').value.trim() ? $('#p-ca-sit').value : ''
   });
   delete rec._id;
   var id = pid || store.key(), paths = {}; paths['produtos/' + id] = rec;

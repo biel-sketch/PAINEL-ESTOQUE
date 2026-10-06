@@ -380,7 +380,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-10-05-1631</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-10-06-0828</div>
     </div>
   </aside>
 
@@ -924,6 +924,7 @@ function nomeProd(id){ return (DB.produtos[id] || {}).nome || '(produto removido
 
 function caStatus(p){
   if(!p.ca) return {cls:'gray', txt:'Sem CA', d:null};
+  if(p.caSituacao && norm(p.caSituacao) !== 'valido' && norm(p.caSituacao) !== 'vencido') return {cls:'red', txt:'CA ' + p.caSituacao.toLowerCase(), d:null};
   if(!p.validadeCA) return {cls:'amber', txt:'Sem validade', d:null};
   var d = daysUntil(p.validadeCA), lim = +cfg('diasAlertaCA', 60);
   if(d < 0) return {cls:'red', txt:'CA vencido', d:d};
@@ -1181,9 +1182,11 @@ function renderValidade(){
     }).join('') + '</tbody></table>' : emptyState('Nenhuma troca vencida ou próxima.');
   } else if(t === 'ca'){
     var all = vals(DB.produtos).filter(function(p){ return p.ativo !== false && p.ca; }).sort(function(a, b){ return (a.validadeCA || '9') < (b.validadeCA || '9') ? -1 : 1; });
-    h = all.length ? '<table><thead><tr><th>Produto</th><th>CA</th><th>Validade</th><th>Situação</th><th class="num">Saldo</th><th></th></tr></thead><tbody>' + all.map(function(p){
+    h = '<div class="panel-head"><span class="panel-title" id="caepi-meta" style="font-size:12px;font-weight:400;color:var(--text-dim)">Base oficial CAEPI</span><button class="btn btn-sm btn-primary" data-act="atualizar-cas"'+(can('produtos') ? '' : ' disabled')+'>Atualizar CAs pela base oficial</button></div>';
+    caepiMetaInfo().then(function(m){ var el = $('#caepi-meta'); if(el) el.textContent = 'Base oficial CAEPI (Ministério do Trabalho) de ' + fmtD(m.atualizadoEm) + ' · ' + fmtN(m.total) + ' CAs'; }).catch(function(){ var el = $('#caepi-meta'); if(el) el.textContent = 'Base oficial CAEPI ainda não publicada no site'; });
+    h += all.length ? '<table><thead><tr><th>Produto</th><th>CA</th><th>Validade</th><th>Situação</th><th>Verificado em</th><th class="num">Saldo</th><th></th></tr></thead><tbody>' + all.map(function(p){
       var s = caStatus(p);
-      return '<tr><td>'+esc(p.nome)+'</td><td class="mono">'+esc(p.ca)+'</td><td class="mono">'+fmtD(p.validadeCA)+'</td><td><span class="pill '+s.cls+'">'+s.txt+'</span></td><td class="num">'+fmtN(saldoProduto(p._id))+'</td>' +
+      return '<tr><td>'+esc(p.nome)+'</td><td class="mono">'+esc(p.ca)+'</td><td class="mono">'+fmtD(p.validadeCA)+'</td><td><span class="pill '+s.cls+'">'+s.txt+'</span></td><td class="mono">'+fmtD(p.caVerificadoEm)+'</td><td class="num">'+fmtN(saldoProduto(p._id))+'</td>' +
         '<td style="white-space:nowrap"><a class="btn btn-sm" target="_blank" rel="noopener" href="https://consultaca.com/'+encodeURIComponent(p.ca)+'">Consultar CA</a> <button class="btn btn-sm" data-act="editar-produto" data-id="'+p._id+'"'+(can('produtos') ? '' : ' disabled')+'>Atualizar</button></td></tr>';
     }).join('') + '</tbody></table>' : emptyState('Nenhum produto com CA cadastrado.');
   } else {
@@ -1522,8 +1525,9 @@ function formProduto(pid){
     field('Nome', '<input id="p-nome" value="'+esc(p.nome || '')+'">', 'full') +
     field('Categoria', '<select id="p-cat">'+optList([['EPI','EPI'],['Uniforme','Uniforme'],['Material','Material']], p.categoria)+'</select>') +
     field('Unidade', '<input id="p-un" value="'+esc(p.unidade || 'UN')+'">') +
-    field('Nº do CA', '<input id="p-ca" value="'+esc(p.ca || '')+'" placeholder="Só para EPI">') +
+    field('Nº do CA', '<div style="display:flex;gap:8px"><input id="p-ca" value="'+esc(p.ca || '')+'" placeholder="Só para EPI" inputmode="numeric"><button class="btn btn-sm" data-act="consultar-ca" type="button">Consultar</button></div><input type="hidden" id="p-ca-sit" value="'+esc(p.caSituacao || '')+'">', '', 'Ao sair do campo, a validade é buscada na base oficial.') +
     field('Validade do CA', '<input type="date" id="p-val" value="'+esc(p.validadeCA || '')+'">') +
+    '<div class="full" id="p-ca-info" style="grid-column:1/-1"></div>' +
     field('Fabricante / marca', '<input id="p-fab" value="'+esc(p.fabricante || '')+'">', 'full') +
     field('Vida útil (troca)', '<div style="display:flex;gap:8px"><input type="number" id="p-vu" min="0" value="'+vuN+'" style="width:90px"><select id="p-vuun">'+optList([['1','dias'],['30','meses'],['365','anos']], String(vuUn))+'</select></div>', '', 'Usada para calcular a próxima troca.') +
     field('Estoque mínimo', '<input type="number" id="p-min" min="0" value="'+(p.estoqueMinimo || 0)+'">', '', 'Gera alerta quando o saldo total ficar abaixo.') +
@@ -1531,8 +1535,10 @@ function formProduto(pid){
     field('Custo médio (R$)', '<input id="p-custo" value="'+(p.custo ? String(p.custo).replace('.', ',') : '')+'">', '', 'Atualizado automaticamente nas entradas com custo.') +
     field('Situação', '<select id="p-ativo">'+optList([['1','Ativo'],['0','Inativo']], p.ativo === false ? '0' : '1')+'</select>') +
     '</div>' + modalActions('Salvar', 'salvar-produto', pid && can('admin') && !saldoProduto(pid) && !vals(DB.movimentos).some(function(m){ return m.pid === pid; }) ? '<button class="btn btn-danger" data-act="excluir-produto" data-id="'+pid+'" style="margin-right:auto">Excluir</button>' : '') + (pid ? '<input type="hidden" id="p-id" value="'+pid+'">' : ''));
+  wireCAProduto();
 }
 formHandlers['salvar-produto'] = function(btn){
+  if(($('#p-ca').value.trim()) !== ((DB.produtos[($('#p-id') || {}).value] || {}).ca || '') && !$('#p-ca-info').innerHTML) $('#p-ca-sit').value = '';
   var pid = ($('#p-id') || {}).value, nome = $('#p-nome').value.trim();
   if(!nome) return formError('Informe o nome.');
   var dup = vals(DB.produtos).find(function(x){ return x._id !== pid && norm(x.nome) === norm(nome); });
@@ -1541,7 +1547,8 @@ formHandlers['salvar-produto'] = function(btn){
   var rec = Object.assign({}, pid ? DB.produtos[pid] : {}, {
     nome: nome, categoria: $('#p-cat').value, unidade: $('#p-un').value.trim() || 'UN', ca: $('#p-ca').value.trim(), validadeCA: $('#p-val').value,
     fabricante: $('#p-fab').value.trim(), vidaUtilDias: Math.round(num($('#p-vu').value) * +$('#p-vuun').value), estoqueMinimo: Math.floor(num($('#p-min').value)),
-    tamanhos: tams, custo: num($('#p-custo').value), ativo: $('#p-ativo').value === '1', atualizadoEm: nowTs()
+    tamanhos: tams, custo: num($('#p-custo').value), ativo: $('#p-ativo').value === '1', atualizadoEm: nowTs(),
+    caSituacao: $('#p-ca').value.trim() ? $('#p-ca-sit').value : ''
   });
   delete rec._id;
   var id = pid || store.key(), paths = {}; paths['produtos/' + id] = rec;
@@ -1988,6 +1995,103 @@ function exportEntregas(){
   });
   exportXlsx('entregas-epi', rows);
 }
+
+// =====================================================================
+// CONSULTA DE CA (base oficial CAEPI do Ministério do Trabalho)
+// A base é baixada todo dia pelo GitHub Actions (.github/workflows/atualizar-caepi.yml)
+// e publicada junto com o site em ca/<numero % 500>.json.
+// =====================================================================
+var CAEPI_URL = location.protocol.indexOf('http') === 0 ? 'ca/' : 'https://biel-sketch.github.io/PAINEL-ESTOQUE/ca/';
+var caepiCache = {}, caepiMeta = null;
+
+function caepiMetaInfo(){
+  if(caepiMeta) return Promise.resolve(caepiMeta);
+  return fetch(CAEPI_URL + 'meta.json', {cache:'no-cache'}).then(function(r){ if(!r.ok) throw new Error('sem base'); return r.json(); })
+    .then(function(m){ caepiMeta = m; return m; });
+}
+// Resolve com o registro do CA, null se não existe na base, ou rejeita se a base não estiver disponível.
+function consultaCA(numero){
+  var n = String(numero || '').replace(/\D/g, '').replace(/^0+/, '');
+  if(!n) return Promise.resolve(null);
+  return caepiMetaInfo().then(function(m){
+    var shard = Number(n) % (m.shards || 500);
+    if(!caepiCache[shard]){
+      caepiCache[shard] = fetch(CAEPI_URL + shard + '.json', {cache:'no-cache'}).then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .catch(function(e){ delete caepiCache[shard]; throw e; });
+    }
+    return caepiCache[shard].then(function(d){ var r = d[n]; if(r) r.ca = n; return r || null; });
+  });
+}
+function caSituacaoCls(rec){
+  if(!rec) return 'gray';
+  var s = norm(rec.s);
+  if(s !== 'valido') return 'red';
+  var d = daysUntil(rec.v);
+  if(d != null && d < 0) return 'red';
+  if(d != null && d <= +cfg('diasAlertaCA', 60)) return 'amber';
+  return 'teal';
+}
+function caInfoHtml(rec){
+  return '<div style="background:#0D1526;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12.5px;line-height:1.5">' +
+    '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px"><b>CA '+esc(rec.ca)+' — '+esc(rec.e || '')+'</b><span class="pill '+caSituacaoCls(rec)+'">'+esc(rec.s || '—')+' até '+fmtD(rec.v)+'</span></div>' +
+    '<div style="color:var(--text-dim)">'+esc(rec.f || '')+(rec.r ? ' · Ref. ' + esc(rec.r) : '')+'</div>' +
+    (rec.d ? '<div style="color:var(--text-dim);margin-top:4px">'+esc(rec.d)+'</div>' : '') +
+    (rec.a ? '<div style="margin-top:4px"><span style="color:var(--text-faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em">Aprovado para</span><br>'+esc(rec.a)+'</div>' : '') +
+    '</div>';
+}
+
+// No cadastro de produto: consulta ao sair do campo CA (ou clicando em Consultar) e preenche os dados
+function wireCAProduto(){
+  var inp = $('#p-ca'), box = $('#p-ca-info'), last = null;
+  if(!inp) return;
+  function run(force){
+    var n = inp.value.replace(/\D/g, '');
+    if(!n){ box.innerHTML = ''; return; }
+    if(n === last && !force) return; last = n;
+    box.innerHTML = '<div class="hint">Consultando CA '+esc(n)+' na base do Ministério do Trabalho...</div>';
+    consultaCA(n).then(function(rec){
+      if(inp.value.replace(/\D/g, '') !== n) return;
+      if(!rec){ box.innerHTML = '<div class="hint" style="color:var(--amber)">CA '+esc(n)+' não encontrado na base oficial. Confira o número ou <a href="https://consultaca.com/'+esc(n)+'" target="_blank" rel="noopener" style="color:var(--teal)">consulte no consultaca.com</a>.</div>'; return; }
+      $('#p-val').value = rec.v || '';
+      if(!$('#p-fab').value.trim() && rec.f) $('#p-fab').value = rec.f;
+      if(!$('#p-nome').value.trim() && rec.e) $('#p-nome').value = rec.e;
+      $('#p-ca-sit').value = rec.s || '';
+      box.innerHTML = caInfoHtml(rec) + '<div class="hint">Validade preenchida automaticamente. Base CAEPI de '+fmtD((caepiMeta || {}).atualizadoEm)+'.</div>';
+    }).catch(function(){
+      box.innerHTML = '<div class="hint" style="color:var(--amber)">Base de CAs ainda não disponível no site. Preencha a validade manualmente ou <a href="https://consultaca.com/'+esc(n)+'" target="_blank" rel="noopener" style="color:var(--teal)">consulte no consultaca.com</a>.</div>';
+      last = null;
+    });
+  }
+  inp.addEventListener('blur', function(){ run(false); });
+  inp.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); run(true); } });
+  formHandlers['consultar-ca'] = function(){ run(true); };
+}
+
+// Na aba Validade e CA: atualiza validade e situação de todos os produtos pela base oficial
+formHandlers['atualizar-cas'] = function(btn){
+  if(!can('produtos')) return;
+  var prods = vals(DB.produtos).filter(function(p){ return p.ca && /\d/.test(p.ca); });
+  if(!prods.length){ toast('Nenhum produto com CA.', 'err'); return; }
+  btn.disabled = true; btn.textContent = 'Consultando ' + prods.length + ' CAs...';
+  var paths = {}, mudou = 0, naoAchou = [];
+  Promise.all(prods.map(function(p){
+    return consultaCA(p.ca).then(function(rec){
+      if(!rec){ naoAchou.push(p.ca); return; }
+      if(rec.v !== p.validadeCA || rec.s !== p.caSituacao){
+        paths['produtos/' + p._id + '/validadeCA'] = rec.v || '';
+        paths['produtos/' + p._id + '/caSituacao'] = rec.s || '';
+        mudou++;
+      }
+      paths['produtos/' + p._id + '/caVerificadoEm'] = today();
+    });
+  })).then(function(){
+    return save(paths, 'CAs atualizados pela base oficial', mudou + ' alterado(s)' + (naoAchou.length ? ', não encontrados: ' + naoAchou.join(', ') : ''));
+  }).then(function(){
+    toast(mudou + ' produto(s) atualizado(s)' + (naoAchou.length ? ' · ' + naoAchou.length + ' CA(s) não encontrado(s)' : '') + '.');
+  }).catch(function(){
+    toast('Base de CAs ainda não disponível no site.', 'err');
+  }).then(function(){ btn.disabled = false; btn.textContent = 'Atualizar CAs pela base oficial'; });
+};
 
 LOGO_SRC = document.querySelector('.brand-logo-img').getAttribute('src');
 </script>

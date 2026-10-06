@@ -9,6 +9,7 @@ Painel de estoque de EPIs, uniformes e materiais do Grupo Login Serv, no mesmo p
 - **Devoluções**: o item volta ao estoque ou é descartado.
 - **Empregados**: itens em posse, histórico e importação da planilha do RH.
 - **Validade e CA**: trocas vencidas ou próximas (pela vida útil), CA vencido ou a vencer, estoque mínimo.
+- **Consulta automática de CA**: ao digitar o nº do CA, o painel busca validade, situação, fabricante e "aprovado para" na base oficial CAEPI do Ministério do Trabalho. A base é baixada todo dia pelo workflow `.github/workflows/atualizar-caepi.yml` e publicada em `ca/`.
 - **Relatórios**: consumo por período e por empresa, exportáveis para Excel.
 - **Perfis**: Administrador, Almoxarife, Técnico de SST e Consulta, além de log de auditoria e backup.
 
