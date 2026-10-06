@@ -1,7 +1,6 @@
 name: Atualizar base de CAs (CAEPI)
 
-# Baixa todo dia a base oficial de Certificados de Aprovação do Ministério do Trabalho
-# e grava em ca/*.json para o painel consultar o CA automaticamente.
+
 on:
   schedule:
     - cron: "17 9 * * *"   # 06:17 em Brasília
