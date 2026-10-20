@@ -1,9 +1,31 @@
 // =====================================================================
 // NAVEGAÇÃO E RENDERIZAÇÃO
 // =====================================================================
-var curView = 'dashboard';
+var curView = 'dashboard', curMod = 'inicio', curSub = 'resumo';
 var tabs = {validade:'trocas', relatorios:'consumo', cadastros:'empresas'};
 var renderQueued = false;
+
+// Menu enxuto: 6 módulos; cada um com poucas subabas no topo da página.
+var MODULES = [
+  {id:'inicio', label:'Início', subs:[{id:'resumo', label:'Resumo', view:'dashboard'}]},
+  {id:'estoque', label:'Estoque', subs:[
+    {id:'saldo', label:'Saldo', view:'estoque'},
+    {id:'movimentos', label:'Movimentações', view:'movimentos'},
+    {id:'produtos', label:'Produtos', view:'produtos'},
+    {id:'alertas', label:'CA e estoque mínimo', view:'validade', tab:'ca', tabsVisiveis:['ca','minimo']}]},
+  {id:'entregas', label:'Entregas de EPI', subs:[
+    {id:'entregas', label:'Entregas', view:'entregas'},
+    {id:'empregados', label:'Empregados', view:'empregados'},
+    {id:'trocas', label:'Trocas pendentes', view:'validade', tab:'trocas', tabsVisiveis:[]}]},
+  {id:'compras', label:'Compras — cotação e aprovação', subs:[{id:'painel', label:'Painel', view:'compras'}]},
+  {id:'relatorios', label:'Relatórios', subs:[{id:'rel', label:'Relatórios', view:'relatorios'}]},
+  {id:'cadastros', label:'Cadastros', subs:[
+    {id:'empresas', label:'Centros / unidades', view:'cadastros', tab:'empresas', tabsVisiveis:[]},
+    {id:'cargos', label:'Cargos e kits de EPI', view:'cadastros', tab:'cargos', tabsVisiveis:[]},
+    {id:'locais', label:'Locais de estoque', view:'cadastros', tab:'locais', tabsVisiveis:[]},
+    {id:'sistema', label:'Sistema', view:'config', admin:true}]}
+];
+function modById(id){ return MODULES.find(function(m){ return m.id === id; }) || MODULES[0]; }
 
 function scheduleRender(){
   if(renderQueued) return; renderQueued = true;
@@ -15,34 +37,60 @@ function renderAll(){
   renderView(curView);
   if(modalRefresh) modalRefresh();
 }
-function showView(v){
-  if(!$('#view-' + v) || (v === 'config' && !can('admin'))) v = 'dashboard';
-  curView = v;
-  try{ localStorage.setItem('painelestoque_view', v); }catch(e){}
-  $$('.nav-item').forEach(function(n){ n.classList.toggle('active', n.dataset.view === v); });
-  $$('.view').forEach(function(s){ s.classList.toggle('active', s.id === 'view-' + v); });
+function showModule(modId, subId){
+  var m = modById(modId);
+  var subs = m.subs.filter(function(x){ return !x.admin || can('admin'); });
+  var sub = subs.find(function(x){ return x.id === subId; }) || subs[0];
+  curMod = m.id; curSub = sub.id; curView = sub.view;
+  if(sub.tab) tabs[sub.view] = sub.tab;
+  try{ localStorage.setItem('painelestoque_nav', m.id + '/' + sub.id); }catch(e){}
+  $$('.nav-item').forEach(function(n){ n.classList.toggle('active', n.dataset.mod === m.id); });
+  $$('.view').forEach(function(s){ s.classList.toggle('active', s.id === 'view-' + sub.view); });
+  $('#mod-title').textContent = m.label;
+  $('#subnav').innerHTML = subs.length > 1 ? subs.map(function(x){ return '<div class="subtab'+(x.id === sub.id ? ' active' : '')+'" data-sub="'+x.id+'">'+esc(x.label)+'</div>'; }).join('') : '';
+  $('#subnav').style.display = subs.length > 1 ? '' : 'none';
+  // abas internas: mostra só as que fazem sentido nesta subaba
+  var box = $('#view-' + sub.view + ' .tabs');
+  if(box){
+    var vis = sub.tabsVisiveis;
+    $$('.tab', box).forEach(function(t){ t.style.display = !vis || vis.indexOf(t.dataset.tab) !== -1 ? '' : 'none'; t.classList.toggle('active', t.dataset.tab === tabs[sub.view]); });
+    box.style.display = vis && vis.length < 2 ? 'none' : '';
+  }
   renderAll();
   window.scrollTo(0, 0);
+}
+// Compatibilidade: abre a tela pelo nome antigo (ex.: 'validade' + aba 'minimo')
+function showView(v, tab){
+  var hit = null;
+  MODULES.forEach(function(m){ m.subs.forEach(function(x){
+    if(hit || x.view !== v) return;
+    if(!tab || !x.tab || x.tab === tab || (x.tabsVisiveis || []).indexOf(tab) !== -1) hit = [m.id, x.id];
+  }); });
+  if(!hit) hit = ['inicio', 'resumo'];
+  if(tab) tabs[v] = tab;
+  showModule(hit[0], hit[1]);
+  if(tab) setTab(v, tab);
 }
 function renderView(v){
   var f = {dashboard:renderDashboard, estoque:renderEstoque, movimentos:renderMovimentos, produtos:renderProdutos,
            entregas:renderEntregas, empregados:renderEmpregados, validade:renderValidade, relatorios:renderRelatorios,
-           cadastros:renderCadastros, config:renderConfig}[v];
+           cadastros:renderCadastros, config:renderConfig, compras:renderCompras}[v];
   if(f) f();
 }
 
 function initUI(){
   var d = new Date();
   $$('.page-date-js').forEach(function(el){ el.textContent = d.toLocaleDateString('pt-BR', {weekday:'long', day:'2-digit', month:'long', year:'numeric'}); });
-  $$('.nav-item').forEach(function(n){ n.addEventListener('click', function(){ showView(n.dataset.view); }); });
+  $$('.nav-item').forEach(function(n){ n.addEventListener('click', function(){ showModule(n.dataset.mod); }); });
+  $('#subnav').addEventListener('click', function(e){ var t = e.target.closest('.subtab'); if(t) showModule(curMod, t.dataset.sub); });
   document.addEventListener('click', function(e){
-    var go = e.target.closest('[data-go]'); if(go){ showView(go.dataset.go); if(go.dataset.tab) setTab(go.dataset.go, go.dataset.tab); return; }
+    var go = e.target.closest('[data-go]'); if(go){ showView(go.dataset.go, go.dataset.tab); return; }
     var act = e.target.closest('[data-act]'); if(act && !act.disabled){ handleAction(act.dataset.act, act); return; }
     var tab = e.target.closest('.tabs .tab'); if(tab){ setTab(curView, tab.dataset.tab); }
   });
   // filtros: re-renderiza a tabela ao digitar/alterar
   ['est-busca','est-cat','est-local','est-zerados','est-minimo','mov-busca','mov-tipo','mov-de','mov-ate','prod-busca','prod-cat','prod-status',
-   'ent-busca','ent-empresa','ent-de','ent-ate','emp-busca','emp-empresa','emp-status','rel-de','rel-ate','rel-empresa','rel-cat'].forEach(function(id){
+   'ent-busca','ent-empresa','ent-de','ent-ate','emp-busca','emp-empresa','emp-status','rel-de','rel-ate','rel-empresa','rel-cat','cmp-busca','cmp-unidade'].forEach(function(id){
     var el = $('#' + id); if(!el) return;
     el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' || el.type === 'date' ? 'change' : 'input', function(){ renderView(curView); });
   });
@@ -140,9 +188,12 @@ function movsPeriodo(de, ate){
   return vals(DB.movimentos).filter(function(m){ return (!de || m.data >= de) && (!ate || m.data <= ate); });
 }
 function updateBadges(){
-  var n = trocasPendentes().filter(function(x){ return daysUntil(x.item.proximaTroca) < 0; }).length
-        + produtosCAAlerta().filter(function(p){ return caStatus(p).cls === 'red' && saldoProduto(p._id) > 0; }).length;
-  $('#badge-validade').textContent = n ? n : '';
+  var trocasVenc = trocasPendentes().filter(function(x){ return daysUntil(x.item.proximaTroca) < 0; }).length;
+  var caVenc = produtosCAAlerta().filter(function(p){ return caStatus(p).cls === 'red' && saldoProduto(p._id) > 0; }).length;
+  var cmp = typeof comprasPendentesUsuario === 'function' ? comprasPendentesUsuario() : 0;
+  $('#badge-entregas').textContent = trocasVenc || '';
+  $('#badge-estoque').textContent = caVenc || '';
+  $('#badge-compras').textContent = cmp || '';
 }
 
 // =====================================================================
@@ -171,6 +222,13 @@ function renderDashboard(){
   trocasVenc.slice(0, 4).forEach(function(x){ var e = DB.empregados[x.empregadoId] || {}; al.push(['red', esc(e.nome), esc(nomeProd(x.item.pid)) + ' — troca prevista ' + fmtD(x.item.proximaTroca), 'validade:trocas']); });
   minimo.slice(0, 4).forEach(function(p){ al.push(['amber', esc(p.nome), 'Saldo ' + saldoProduto(p._id) + ' · mínimo ' + p.estoqueMinimo, 'validade:minimo']); });
   produtosCAAlerta().filter(function(p){ return caStatus(p).cls === 'amber'; }).slice(0, 3).forEach(function(p){ al.push(['amber', esc(p.nome), 'CA ' + esc(p.ca) + ' vence em ' + fmtD(p.validadeCA), 'validade:ca']); });
+  var cmps = vals(DB.compras);
+  var aguard = cmps.filter(function(c){ return cmpEtapa(c) === 'aguardando'; }).length;
+  var aEmitir = cmps.filter(function(c){ return cmpEtapa(c) === 'aprovada'; }).length;
+  var atras = cmps.filter(function(c){ return cmpEtapa(c) === 'pedido' && daysUntil(c.entregaPrevista) < 0; }).length;
+  if(atras) al.unshift(['red', atras + ' pedido(s) de compra atrasado(s)', 'Entrega prevista já passou', 'compras:']);
+  if(aguard && can('aprovar')) al.unshift(['amber', aguard + ' compra(s) aguardando sua aprovação', 'Abra o painel de compras para aprovar ou reprovar', 'compras:']);
+  if(aEmitir && can('comprar')) al.unshift(['amber', aEmitir + ' compra(s) aprovada(s) sem pedido', 'Emita o pedido ao fornecedor', 'compras:']);
   $('#dash-alertas').innerHTML = al.length ? al.slice(0, 9).map(function(a){
     var g = a[3].split(':');
     return '<div class="list-item" style="cursor:pointer" data-go="'+g[0]+'" data-tab="'+g[1]+'"><span class="alert-dot '+a[0]+'"></span><div class="grow"><div class="t">'+a[1]+'</div><div class="s">'+a[2]+'</div></div></div>';
@@ -340,8 +398,10 @@ function renderValidade(){
   var trocas = trocasPendentes(), cas = produtosCAAlerta(), minimo = produtosAbaixoMinimo();
   var tv = trocas.filter(function(x){ return daysUntil(x.item.proximaTroca) < 0; }).length;
   var cv = cas.filter(function(p){ return caStatus(p).cls === 'red'; }).length;
-  $('#val-stats').innerHTML = statCard('Trocas vencidas', tv, tv ? 'red' : '') + statCard('Trocas nos próximos ' + cfg('diasAlertaTroca', 15) + ' dias', trocas.length - tv, 'amber') +
-    statCard('CAs vencidos', cv, cv ? 'red' : '') + statCard('Abaixo do mínimo', minimo.length, minimo.length ? 'amber' : '');
+  var cvv = cas.filter(function(p){ return caStatus(p).cls === 'amber'; }).length;
+  $('#val-stats').innerHTML = tabs.validade === 'trocas'
+    ? statCard('Trocas vencidas', tv, tv ? 'red' : '') + statCard('Trocas nos próximos ' + cfg('diasAlertaTroca', 15) + ' dias', trocas.length - tv, 'amber')
+    : statCard('CAs vencidos', cv, cv ? 'red' : '', '', 'validade:ca') + statCard('CAs vencendo', cvv, cvv ? 'amber' : '', 'próximos ' + cfg('diasAlertaCA', 60) + ' dias', 'validade:ca') + statCard('Abaixo do mínimo', minimo.length, minimo.length ? 'amber' : '', '', 'validade:minimo');
   var t = tabs.validade, h = '';
   if(t === 'trocas'){
     h = trocas.length ? '<table><thead><tr><th>Empregado</th><th>Item</th><th>Tam.</th><th>Entregue em</th><th>Troca prevista</th><th>Situação</th><th></th></tr></thead><tbody>' + trocas.map(function(x){
@@ -362,7 +422,7 @@ function renderValidade(){
   } else {
     h = minimo.length ? '<table><thead><tr><th>Produto</th><th class="num">Saldo</th><th class="num">Mínimo</th><th class="num">Faltam</th><th></th></tr></thead><tbody>' + minimo.map(function(p){
       var s = saldoProduto(p._id);
-      return '<tr><td>'+esc(p.nome)+'</td><td class="num">'+s+'</td><td class="num">'+p.estoqueMinimo+'</td><td class="num qty-out">'+(p.estoqueMinimo - s)+'</td><td><button class="btn btn-sm" data-act="nova-entrada" data-id="'+p._id+'"'+(can('movimentar') ? '' : ' disabled')+'>Dar entrada</button></td></tr>';
+      return '<tr><td>'+esc(p.nome)+'</td><td class="num">'+s+'</td><td class="num">'+p.estoqueMinimo+'</td><td class="num qty-out">'+(p.estoqueMinimo - s)+'</td><td style="white-space:nowrap"><button class="btn btn-sm" data-act="nova-compra" data-id="'+p._id+'"'+(can('solicitar') ? '' : ' disabled')+'>Solicitar compra</button> <button class="btn btn-sm" data-act="nova-entrada" data-id="'+p._id+'"'+(can('movimentar') ? '' : ' disabled')+'>Dar entrada</button></td></tr>';
     }).join('') + '</tbody></table>' : emptyState('Nenhum produto abaixo do mínimo. Defina o estoque mínimo no cadastro de cada produto.');
   }
   $('#val-table').innerHTML = h;
@@ -444,7 +504,7 @@ function renderConfig(){
   if(!can('admin')){ $('#cfg-body').innerHTML = '<div class="perm-note">Somente administradores.</div>'; return; }
   var users = USER_ROLES.map(function(u){ var r = rolePermissions[u.role] || {}; return '<tr><td>'+esc(u.name)+'</td><td class="mono">'+esc(u.user)+'</td><td class="mono">'+esc(u.email)+'</td><td><span class="pill teal">'+esc(r.label || u.role)+'</span></td></tr>'; }).join('');
   var perms = Object.keys(rolePermissions).map(function(k){ var r = rolePermissions[k]; var ok = function(b){ return b ? '<span class="qty-in">✓</span>' : '<span style="color:var(--text-faint)">—</span>'; };
-    return '<tr><td>'+r.label+'</td><td>'+ok(r.movimentar)+'</td><td>'+ok(r.entregar)+'</td><td>'+ok(r.produtos)+'</td><td>'+ok(r.empregados)+'</td><td>'+ok(r.cadastros)+'</td><td>'+ok(r.admin)+'</td></tr>'; }).join('');
+    return '<tr><td>'+r.label+'</td><td>'+ok(r.movimentar)+'</td><td>'+ok(r.entregar)+'</td><td>'+ok(r.produtos)+'</td><td>'+ok(r.empregados)+'</td><td>'+ok(r.cadastros)+'</td><td>'+ok(r.solicitar)+'</td><td>'+ok(r.comprar)+'</td><td>'+ok(r.aprovar)+'</td><td>'+ok(r.admin)+'</td></tr>'; }).join('');
   var logs = vals(DB.logs).sort(function(a, b){ return b.ts - a.ts; }).slice(0, 150);
   $('#cfg-body').innerHTML =
     '<div class="cfg-grid">' +
@@ -457,7 +517,7 @@ function renderConfig(){
       '<div class="cfg-card"><h3>Backup</h3><p>Baixa todos os dados do painel em um arquivo JSON.</p><button class="btn" data-act="backup">Baixar backup</button></div>' +
     '</div>' +
     '<div class="panel" style="margin-top:16px"><div class="panel-head"><span class="panel-title">Usuários com acesso</span><span class="mono" style="font-size:11px">edite a lista USER_ROLES no código e crie o login no Firebase Authentication</span></div><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Usuário</th><th>E-mail (Firebase)</th><th>Perfil</th></tr></thead><tbody>'+users+'</tbody></table></div></div>' +
-    '<div class="panel" style="margin-top:16px"><div class="panel-head"><span class="panel-title">O que cada perfil pode fazer</span></div><div class="table-wrap"><table><thead><tr><th>Perfil</th><th>Movimentar estoque</th><th>Entregar EPI</th><th>Produtos</th><th>Empregados</th><th>Cadastros</th><th>Administração</th></tr></thead><tbody>'+perms+'</tbody></table></div></div>' +
+    '<div class="panel" style="margin-top:16px"><div class="panel-head"><span class="panel-title">O que cada perfil pode fazer</span></div><div class="table-wrap"><table><thead><tr><th>Perfil</th><th>Movimentar estoque</th><th>Entregar EPI</th><th>Produtos</th><th>Empregados</th><th>Cadastros</th><th>Solicitar compra</th><th>Cotar / comprar</th><th>Aprovar compra</th><th>Administração</th></tr></thead><tbody>'+perms+'</tbody></table></div></div>' +
     '<div class="panel" style="margin-top:16px"><div class="panel-head"><span class="panel-title">Log de auditoria</span><span class="mono" style="font-size:11px">últimos '+logs.length+' registros</span></div><div class="table-wrap">' + (logs.length ? '<table><thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Detalhe</th></tr></thead><tbody>' + logs.map(function(l){
       return '<tr><td class="mono">'+fmtDT(l.ts)+'</td><td>'+esc(l.usuario)+'</td><td>'+esc(l.acao)+'</td><td style="font-size:12px">'+esc(l.detalhe)+'</td></tr>'; }).join('') + '</tbody></table>' : emptyState('Sem registros.')) + '</div></div>';
 }

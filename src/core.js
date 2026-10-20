@@ -26,10 +26,12 @@ var DB_ROOT = 'painel-estoque';
 // As senhas NÃO ficam aqui — são validadas pelo Firebase.
 // ---------------------------------------------------------------------
 var rolePermissions = {
-  administrador: {label:'Administrador', initials:'AD', movimentar:true,  entregar:true,  produtos:true,  empregados:true,  cadastros:true,  admin:true},
-  almoxarife:    {label:'Almoxarife',    initials:'AL', movimentar:true,  entregar:true,  produtos:true,  empregados:true,  cadastros:true,  admin:false},
-  tecnico_sst:   {label:'Técnico de SST',initials:'TS', movimentar:false, entregar:true,  produtos:false, empregados:true,  cadastros:true,  admin:false},
-  consulta:      {label:'Consulta',      initials:'CO', movimentar:false, entregar:false, produtos:false, empregados:false, cadastros:false, admin:false}
+  administrador: {label:'Administrador', initials:'AD', movimentar:true,  entregar:true,  produtos:true,  empregados:true,  cadastros:true,  solicitar:true,  comprar:true,  aprovar:true,  admin:true},
+  almoxarife:    {label:'Almoxarife',    initials:'AL', movimentar:true,  entregar:true,  produtos:true,  empregados:true,  cadastros:true,  solicitar:true,  comprar:false, aprovar:false, admin:false},
+  tecnico_sst:   {label:'Técnico de SST',initials:'TS', movimentar:false, entregar:true,  produtos:false, empregados:true,  cadastros:true,  solicitar:true,  comprar:false, aprovar:false, admin:false},
+  comprador:     {label:'Comprador',     initials:'CP', movimentar:true,  entregar:false, produtos:true,  empregados:false, cadastros:true,  solicitar:true,  comprar:true,  aprovar:false, admin:false},
+  aprovador:     {label:'Aprovador',     initials:'AP', movimentar:false, entregar:false, produtos:false, empregados:false, cadastros:false, solicitar:true,  comprar:false, aprovar:true,  admin:false},
+  consulta:      {label:'Consulta',      initials:'CO', movimentar:false, entregar:false, produtos:false, empregados:false, cadastros:false, solicitar:false, comprar:false, aprovar:false, admin:false}
 };
 var USER_ROLES = [
   {user:'gabriel', email:'gabriel@loginserv.com.br', name:'Gabriel', role:'administrador'},
@@ -41,7 +43,7 @@ var USER_ROLES = [
 // HELPERS
 // =====================================================================
 var FB_ON = !!(firebaseConfig.apiKey && firebaseConfig.apiKey !== 'COLE_AQUI' && firebaseConfig.databaseURL);
-var COLS = ['produtos','saldos','movimentos','entregas','empregados','empresas','cargos','locais','config','logs'];
+var COLS = ['produtos','saldos','movimentos','entregas','empregados','empresas','cargos','locais','compras','config','logs'];
 var DB = {}; COLS.forEach(function(c){ DB[c] = {}; });
 
 function $(s, el){ return (el||document).querySelector(s); }
@@ -232,11 +234,12 @@ function completeLogin(ur){
   $('#app-shell').classList.add('visible');
   applyRolePermissions();
   store.start();
-  showView(localStorage.getItem('painelestoque_view') || 'dashboard');
+  var nav = ''; try{ nav = localStorage.getItem('painelestoque_nav') || ''; }catch(e){}
+  showModule(nav.split('/')[0] || 'inicio', nav.split('/')[1]);
 }
 function applyRolePermissions(){
   $$('[data-somente-admin]').forEach(function(el){ el.style.display = can('admin') ? '' : 'none'; });
-  ['movimentar','entregar','produtos','empregados','cadastros'].forEach(function(p){
+  ['movimentar','entregar','produtos','empregados','cadastros','solicitar','comprar','aprovar'].forEach(function(p){
     $$('.need-' + p).forEach(function(b){ b.disabled = !can(p); b.title = can(p) ? '' : 'Seu perfil não permite esta ação.'; });
   });
 }

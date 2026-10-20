@@ -6,7 +6,7 @@ logo = (S / 'logo.datauri').read_text().strip()
 build = datetime.datetime.now().strftime('%Y-%m-%d-%H%M')
 css = (S / 'base.css').read_text(encoding='utf8') + (S / 'extra.css').read_text(encoding='utf8')
 body = (S / 'body.html').read_text(encoding='utf8').replace('{{LOGO}}', logo).replace('{{BUILD}}', build)
-js = '\n'.join((S / f).read_text(encoding='utf8') for f in ['core.js', 'views.js', 'forms.js', 'print.js', 'caepi.js'])
+js = '\n'.join((S / f).read_text(encoding='utf8') for f in ['core.js', 'views.js', 'forms.js', 'print.js', 'caepi.js', 'compras.js'])
 js = "var LOGO_SRC = document.querySelector('.brand-logo-img') ? '' : '';\n" + js
 html = f'''<!DOCTYPE html>
 <html lang="pt-BR">
