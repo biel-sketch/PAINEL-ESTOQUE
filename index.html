@@ -414,7 +414,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-10-22-0837</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-10-22-0854</div>
     </div>
   </aside>
 
@@ -533,7 +533,7 @@
       <div class="chips-bar" id="cmp-etapas"></div>
       <div class="toolbar">
         <input class="tb-input search" id="cmp-busca" placeholder="Buscar item, fornecedor, nº da solicitação...">
-        <select class="tb-select sel-empresas" id="cmp-unidade" data-all="Todos os centros / unidades"></select>
+        <select class="tb-select sel-centros" id="cmp-unidade" data-all="Todos os clientes / centros"></select>
         <span class="spacer"></span>
         <button class="btn" data-act="export-compras">Exportar Excel</button>
         <button class="btn btn-primary need-solicitar" data-act="nova-compra">+ Nova solicitação</button>
@@ -546,6 +546,7 @@
       <div class="topbar"><div class="page-title">Relatórios</div><div class="page-date page-date-js"></div></div>
       <div class="tabs" id="rel-tabs">
         <div class="tab active" data-tab="consumo">Consumo por período</div>
+        <div class="tab" data-tab="cliente">Consumo por cliente</div>
         <div class="tab" data-tab="empresa">Consumo por empresa</div>
       </div>
       <div class="toolbar" id="rel-filtros">
@@ -635,7 +636,8 @@ var USER_ROLES = [
 // HELPERS
 // =====================================================================
 var FB_ON = !!(firebaseConfig.apiKey && firebaseConfig.apiKey !== 'COLE_AQUI' && firebaseConfig.databaseURL);
-var COLS = ['produtos','saldos','movimentos','entregas','empregados','empresas','cargos','locais','compras','config','logs'];
+var COLS = ['produtos','saldos','movimentos','entregas','empregados','empresas','cargos','locais','compras','clientes','config','logs'];
+var DB_LOADED = {};
 var DB = {}; COLS.forEach(function(c){ DB[c] = {}; });
 
 function $(s, el){ return (el||document).querySelector(s); }
@@ -692,7 +694,7 @@ function firebaseStore(){
     start: function(){
       COLS.forEach(function(c){
         var ref = c === 'logs' ? root.child(c).limitToLast(300) : root.child(c);
-        var fn = function(snap){ DB[c] = snap.val() || {}; scheduleRender(); };
+        var fn = function(snap){ DB[c] = snap.val() || {}; DB_LOADED[c] = true; scheduleRender(); };
         ref.on('value', fn, function(err){ console.error(c, err); setSync('err', 'Erro de acesso'); });
         listeners.push([ref, fn]);
       });
@@ -731,6 +733,7 @@ function localStore(){
   return {
     start: function(){
       try{ var s = JSON.parse(localStorage.getItem(K) || 'null'); if(s) COLS.forEach(function(c){ DB[c] = s[c] || {}; }); }catch(e){}
+      COLS.forEach(function(c){ DB_LOADED[c] = true; });
       setSync('syncing', 'Modo local'); scheduleRender();
     },
     stop: function(){},
@@ -887,7 +890,7 @@ document.addEventListener('DOMContentLoaded', function(){
 // NAVEGAÇÃO E RENDERIZAÇÃO
 // =====================================================================
 var curView = 'dashboard', curMod = 'inicio', curSub = 'resumo';
-var tabs = {validade:'trocas', relatorios:'consumo', cadastros:'empresas'};
+var tabs = {validade:'trocas', relatorios:'consumo', cadastros:'clientes'};
 var renderQueued = false;
 
 // Menu enxuto: 6 módulos; cada um com poucas subabas no topo da página.
@@ -905,7 +908,8 @@ var MODULES = [
   {id:'compras', label:'Compras — cotação e aprovação', subs:[{id:'painel', label:'Painel', view:'compras'}]},
   {id:'relatorios', label:'Relatórios', subs:[{id:'rel', label:'Relatórios', view:'relatorios'}]},
   {id:'cadastros', label:'Cadastros', subs:[
-    {id:'empresas', label:'Centros / unidades', view:'cadastros', tab:'empresas', tabsVisiveis:[]},
+    {id:'clientes', label:'Clientes', view:'cadastros', tab:'clientes', tabsVisiveis:[]},
+    {id:'empresas', label:'Empresas', view:'cadastros', tab:'empresas', tabsVisiveis:[]},
     {id:'cargos', label:'Cargos e kits de EPI', view:'cadastros', tab:'cargos', tabsVisiveis:[]},
     {id:'locais', label:'Locais de estoque', view:'cadastros', tab:'locais', tabsVisiveis:[]},
     {id:'sistema', label:'Sistema', view:'config', admin:true}]}
@@ -918,6 +922,7 @@ function scheduleRender(){
 }
 function renderAll(){
   fillSelects();
+  syncClientes();
   updateBadges();
   renderView(curView);
   if(modalRefresh) modalRefresh();
@@ -1008,6 +1013,7 @@ function fillSelects(){
     s.innerHTML = '<option value="">' + esc(s.dataset.all || 'Selecione...') + '</option>' + empresas.map(function(e){ return '<option value="'+e._id+'">'+esc(e.nome)+'</option>'; }).join('');
     s.value = v;
   });
+  $$('.sel-centros').forEach(function(s){ var v = s.value; s.innerHTML = centrosOptsHtml(v, s.dataset.all); s.value = v; });
   $$('.sel-locais').forEach(function(s){
     var v = s.value;
     s.innerHTML = '<option value="">' + esc(s.dataset.all || 'Selecione...') + '</option>' + locais.map(function(e){ return '<option value="'+e._id+'">'+esc(e.nome)+'</option>'; }).join('');
@@ -1244,12 +1250,12 @@ function filtroEntregas(){
 function renderEntregas(){
   var list = filtroEntregas();
   if(!list.length){ $('#ent-table').innerHTML = emptyState('Nenhuma entrega no período.'); return; }
-  $('#ent-table').innerHTML = '<table><thead><tr><th>Data</th><th>Empregado</th><th>Itens</th><th>Motivo</th><th>Assinatura</th><th>Responsável</th><th></th></tr></thead><tbody>' +
+  $('#ent-table').innerHTML = '<table><thead><tr><th>Data</th><th>Empregado</th><th>Itens</th><th>Motivo</th><th>Responsável</th><th></th></tr></thead><tbody>' +
     list.map(function(en){
       var e = DB.empregados[en.empregadoId] || {};
       var itens = (en.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk && i.tk !== 'UN' ? ' (' + i.tk + ')' : '')); }).join('<br>');
       return '<tr><td class="mono">'+fmtD(en.data)+'</td><td><a href="#" data-act="ficha-empregado" data-id="'+en.empregadoId+'" style="color:var(--text)">'+esc(e.nome || '—')+'</a><span class="sub">'+esc(nomeEmpresa(e.empresaId))+(e.cliente ? ' · ' + esc(e.cliente) : '')+'</span></td>' +
-        '<td style="font-size:12px">'+itens+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'</td><td>'+(en.assinatura ? '<span class="pill teal">Assinado</span>' : '<span class="pill amber">Pendente</span>')+'</td>' +
+        '<td style="font-size:12px">'+itens+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'</td>' +
         '<td class="mono">'+esc(en.usuario || '')+'</td><td style="white-space:nowrap"><button class="btn btn-sm" data-act="print-termo" data-id="'+en._id+'">Termo</button></td></tr>';
     }).join('') + '</tbody></table><div class="tbl-foot">'+list.length+' entregas</div>';
 }
@@ -1325,13 +1331,15 @@ function renderValidade(){
 function renderCadastros(){
   var t = tabs.cadastros, h = '';
   $('#cad-novo').disabled = !can('cadastros');
-  $('#cad-novo').textContent = {empresas:'+ Nova empresa', cargos:'+ Novo cargo', locais:'+ Novo local'}[t];
-  if(t === 'empresas'){
+  $('#cad-novo').textContent = {clientes:'+ Novo cliente', empresas:'+ Nova empresa', cargos:'+ Novo cargo', locais:'+ Novo local'}[t];
+  if(t === 'clientes'){
+    h = renderClientesTab();
+  } else if(t === 'empresas'){
     var l = vals(DB.empresas).sort(byName);
-    h = l.length ? '<table><thead><tr><th>Empresa / unidade</th><th>CNPJ</th><th>Cidade</th><th class="num">Empregados ativos</th></tr></thead><tbody>' + l.map(function(e){
+    h = l.length ? '<table><thead><tr><th>Empresa</th><th>CNPJ</th><th>Cidade</th><th class="num">Empregados ativos</th></tr></thead><tbody>' + l.map(function(e){
       var n = vals(DB.empregados).filter(function(x){ return x.empresaId === e._id && x.ativo !== false; }).length;
       return '<tr class="row-clickable" data-act="editar-empresa" data-id="'+e._id+'"><td>'+esc(e.nome)+'</td><td class="mono">'+esc(e.cnpj || '—')+'</td><td>'+esc(e.cidade || '—')+'</td><td class="num">'+n+'</td></tr>';
-    }).join('') + '</tbody></table>' : emptyState('Cadastre as empresas/clientes onde os empregados trabalham (ex.: Eucatex, Femsa Marília).');
+    }).join('') + '</tbody></table>' : emptyState('Cadastre as empresas empregadoras (ex.: Login Serv, Solutions). Elas também são criadas pela importação de colaboradores.');
   } else if(t === 'cargos'){
     var c = vals(DB.cargos).sort(byName);
     h = c.length ? '<table><thead><tr><th>Cargo</th><th>Kit de EPI / uniforme</th><th class="num">Empregados</th></tr></thead><tbody>' + c.map(function(g){
@@ -1374,15 +1382,16 @@ function renderRelatorios(){
       return '<tr><td>'+esc(p.nome)+'</td><td>'+esc(p.categoria || '')+'</td><td class="mono">'+esc(tamLabel(r.tk))+'</td><td class="num">'+fmtN(r.qtd)+'</td><td class="num">'+(r.valor ? fmtR(r.valor) : '—')+'</td></tr>';
     }).join('') + '</tbody></table>' : emptyState('Nenhuma entrega no período.')) + '</div></div>';
   } else {
+    var porCli = t === 'cliente';
     var ge = {};
-    movs.forEach(function(m){ var e = DB.empregados[m.empregadoId] || {}; var k = e.empresaId || '_'; ge[k] = ge[k] || {empresa:k, qtd:0, valor:0, pessoas:{}}; ge[k].qtd += +m.qtd; ge[k].valor += (+m.qtd) * (+m.custoUnit || +(DB.produtos[m.pid] || {}).custo || 0); ge[k].pessoas[m.empregadoId] = 1; });
+    movs.forEach(function(m){ var e = DB.empregados[m.empregadoId] || {}; var k = porCli ? (e.cliente ? cliKey(e.cliente) : '_') : (e.empresaId || '_'); ge[k] = ge[k] || {empresa:k, nome: porCli ? (e.cliente || 'Sem cliente') : nomeEmpresa(e.empresaId), qtd:0, valor:0, pessoas:{}}; ge[k].qtd += +m.qtd; ge[k].valor += (+m.qtd) * (+m.custoUnit || +(DB.produtos[m.pid] || {}).custo || 0); ge[k].pessoas[m.empregadoId] = 1; });
     var re = vals(ge).sort(function(a, b){ return b.qtd - a.qtd; });
-    relData = {nome:'consumo-por-empresa', rows: re.map(function(r){ var n = Object.keys(r.pessoas).length; return {Empresa:nomeEmpresa(r.empresa), Empregados:n, Itens:r.qtd, Valor:Math.round(r.valor * 100) / 100, 'Valor por empregado':n ? Math.round(r.valor / n * 100) / 100 : 0}; })};
+    relData = {nome: porCli ? 'consumo-por-cliente' : 'consumo-por-empresa', rows: re.map(function(r){ var n = Object.keys(r.pessoas).length; var o = {}; o[porCli ? 'Cliente' : 'Empresa'] = r.nome; return Object.assign(o, { Empregados:n, Itens:r.qtd, Valor:Math.round(r.valor * 100) / 100, 'Valor por empregado':n ? Math.round(r.valor / n * 100) / 100 : 0}); })};
     var mx = re.length ? re[0].qtd : 1;
-    h = '<div class="panel"><div class="panel-head"><span class="panel-title">Itens entregues por empresa — '+fmtD(de)+' a '+fmtD(ate)+'</span></div>' + (re.length ? '<div class="bars">' + re.map(function(r){
+    h = '<div class="panel"><div class="panel-head"><span class="panel-title">Itens entregues por '+(porCli ? 'cliente' : 'empresa')+' — '+fmtD(de)+' a '+fmtD(ate)+'</span></div>' + (re.length ? '<div class="bars">' + re.map(function(r){
       return '<div class="bar-row"><span class="bar-label">'+esc(nomeEmpresa(r.empresa))+'</span><div class="bar-track"><div class="bar-fill" style="width:'+(r.qtd / mx * 100)+'%"></div></div><span class="bar-val">'+fmtN(r.qtd)+'</span></div>';
-    }).join('') + '</div><div class="table-wrap"><table><thead><tr><th>Empresa</th><th class="num">Empregados atendidos</th><th class="num">Itens</th><th class="num">Valor</th><th class="num">Valor / empregado</th></tr></thead><tbody>' + relData.rows.map(function(r){
-      return '<tr><td>'+esc(r.Empresa)+'</td><td class="num">'+r.Empregados+'</td><td class="num">'+fmtN(r.Itens)+'</td><td class="num">'+(r.Valor ? fmtR(r.Valor) : '—')+'</td><td class="num">'+(r['Valor por empregado'] ? fmtR(r['Valor por empregado']) : '—')+'</td></tr>';
+    }).join('') + '</div><div class="table-wrap"><table><thead><tr><th>'+(porCli ? 'Cliente' : 'Empresa')+'</th><th class="num">Empregados atendidos</th><th class="num">Itens</th><th class="num">Valor</th><th class="num">Valor / empregado</th></tr></thead><tbody>' + relData.rows.map(function(r){
+      return '<tr><td>'+esc(r.Cliente || r.Empresa)+'</td><td class="num">'+r.Empregados+'</td><td class="num">'+fmtN(r.Itens)+'</td><td class="num">'+(r.Valor ? fmtR(r.Valor) : '—')+'</td><td class="num">'+(r['Valor por empregado'] ? fmtR(r['Valor por empregado']) : '—')+'</td></tr>';
     }).join('') + '</tbody></table></div>' : emptyState('Nenhuma entrega no período.')) + '</div>';
   }
   $('#rel-body').innerHTML = h;
@@ -1452,7 +1461,7 @@ function handleAction(a, el){
     case 'editar-empregado': formEmpregado(id); break;
     case 'ficha-empregado': fichaEmpregado(id); break;
     case 'devolver': formDevolucao(el.dataset.ent, +el.dataset.idx); break;
-    case 'cad-novo': ({empresas:formEmpresa, cargos:formCargo, locais:formLocal})[tabs.cadastros](); break;
+    case 'cad-novo': ({clientes:formCliente, empresas:formEmpresa, cargos:formCargo, locais:formLocal})[tabs.cadastros](); break;
     case 'editar-empresa': formEmpresa(id); break;
     case 'editar-cargo': formCargo(id); break;
     case 'editar-local': formLocal(id); break;
@@ -1472,6 +1481,7 @@ function handleAction(a, el){
   }
 }
 var formHandlers = {};
+function tamanhosTxt(e){ var t = (e && e.tamanhos) || {}, l = [['calcado','Calçado'],['calca','Calça'],['camisa','Camisa'],['luva','Luva']].filter(function(x){ return t[x[0]]; }); return l.map(function(x){ return x[1] + ' <b>' + esc(t[x[0]]) + '</b>'; }).join(' · '); }
 function onPick(el, fn){ var last = null; ['input','change'].forEach(function(ev){ el.addEventListener(ev, function(){ if(el.value === last && ev === 'change') return; last = el.value; fn(); }); }); }
 
 // Linha de item com produto (datalist) + tamanho
@@ -1712,7 +1722,7 @@ function verProduto(pid){
 }
 
 // =====================================================================
-// ENTREGA DE EPI (com kit do cargo, tamanhos e assinatura)
+// ENTREGA DE EPI (kit do cargo; tamanhos guardados a cada entrega)
 // =====================================================================
 var sigPad = null;
 function grupoTamanho(p){
@@ -1735,13 +1745,11 @@ function formEntrega(empId){
     '<table class="items-table"><thead><tr><th style="width:46%">Produto</th><th>Tamanho</th><th style="width:80px">Qtd</th><th>Próxima troca</th><th style="width:36px"></th></tr></thead><tbody id="e-itens"></tbody></table>' +
     '<button class="btn btn-sm" style="margin-top:8px" data-act="add-item-entrega">+ Adicionar item</button>' +
     field('Observação', '<input id="e-obs">', 'full') +
-    '<div class="section-label">Assinatura do empregado</div><div class="sig-wrap"><canvas id="e-sig"></canvas><button class="btn btn-sm sig-clear" data-act="limpar-assinatura" style="background:#fff;color:#333;border-color:#ccc">Limpar</button><span class="sig-hint">Assine aqui com o dedo ou o mouse</span></div>' +
-    '<label class="modal-check"><input type="checkbox" id="e-print" checked> Imprimir o termo de recebimento ao salvar</label>' +
+    '<label class="modal-check"><input type="checkbox" id="e-print" checked> Imprimir o termo de recebimento para assinatura</label>' +
     modalActions('Registrar entrega', 'salvar-entrega'), 'wide');
   onPick($('#e-emp'), entregaEmpChanged);
   $('#e-data').addEventListener('change', function(){ $$('#e-itens tr').forEach(function(tr){ refreshItemEntrega(tr); }); });
   $('#e-loc').addEventListener('change', function(){ $$('#e-itens tr').forEach(function(tr){ refreshItemEntrega(tr); }); });
-  sigPad = initSignature($('#e-sig'));
   entregaEmpChanged();
   if(e && e.cargoId && (DB.cargos[e.cargoId] || {}).kit && itensEmPosse(empId).length === 0) carregarKit();
   else addItemEntrega();
@@ -1752,7 +1760,7 @@ function entregaEmpChanged(){
   var t = e.tamanhos || {}, posse = itensEmPosse(id);
   box.innerHTML = '<div class="info-grid" style="background:#0D1526;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0">' +
     '<div><div class="lbl">Empresa</div>'+esc(nomeEmpresa(e.empresaId))+'</div><div><div class="lbl">Cargo</div>'+esc(nomeCargo(e.cargoId))+'</div>' +
-    '<div><div class="lbl">Tamanhos</div>Camisa '+esc(t.camisa || '—')+' · Calça '+esc(t.calca || '—')+' · Calçado '+esc(t.calcado || '—')+' · Luva '+esc(t.luva || '—')+'</div>' +
+    (tamanhosTxt(e) ? '<div><div class="lbl">Tamanhos da última entrega</div>'+tamanhosTxt(e)+'</div>' : '<div><div class="lbl">Cliente</div>'+esc(e.cliente || '—')+'</div>') +
     '<div><div class="lbl">Em posse</div>'+(posse.length ? posse.map(function(x){ return esc(x.aberto + '× ' + nomeProd(x.item.pid)); }).join(', ') : 'Nada')+'</div></div>';
   $$('#e-itens tr').forEach(function(tr){ refreshItemEntrega(tr, true); });
 }
@@ -1802,7 +1810,6 @@ function carregarKit(){
 }
 formHandlers['carregar-kit'] = carregarKit;
 formHandlers['add-item-entrega'] = function(){ addItemEntrega(); };
-formHandlers['limpar-assinatura'] = function(){ if(sigPad) sigPad.clear(); };
 formHandlers['salvar-entrega'] = function(btn){
   var empId = findEmpByLabel($('#e-emp').value); if(!empId) return formError('Escolha o empregado.');
   var loc = $('#e-loc').value, data = $('#e-data').value || today(), itens = [], bad = null;
@@ -1816,7 +1823,6 @@ formHandlers['salvar-entrega'] = function(btn){
   });
   if(bad) return formError(bad);
   if(!itens.length) return formError('Adicione pelo menos um item.');
-  var assinatura = sigPad && !sigPad.isEmpty() ? sigPad.toDataURL() : '';
   var imprimir = $('#e-print').checked;
   busy(btn, true);
   applyStock(itens.map(function(i){ return {pid:i.pid, tk:i.tk, loc:loc, delta:-i.qtd}; })).then(function(){
@@ -1824,7 +1830,9 @@ formHandlers['salvar-entrega'] = function(btn){
     // itens anteriores do mesmo produto ficam marcados como substituídos (não entram mais nas trocas pendentes)
     itensEmPosse(empId).forEach(function(x){ if(itens.some(function(i){ return i.pid === x.item.pid; })) paths['entregas/' + x.entregaId + '/itens/' + x.idx + '/substituidoPor'] = entId; });
     itens.forEach(function(i){ paths['movimentos/' + store.key()] = movRecord({data:data, tipo:'entrega', pid:i.pid, tk:i.tk, loc:loc, qtd:i.qtd, empregadoId:empId, entregaId:entId, custoUnit:(DB.produtos[i.pid] || {}).custo || undefined, motivo:$('#e-mot').value}); });
-    paths['entregas/' + entId] = {data:data, ts:nowTs(), empregadoId:empId, loc:loc, motivo:$('#e-mot').value, obs:$('#e-obs').value.trim(), itens:itens, assinatura:assinatura, usuario:currentUser.name};
+    // guarda o tamanho usado (calçado, calça, camisa, luva) para sugerir na próxima entrega
+    itens.forEach(function(i){ if(i.tk && i.tk !== 'UN' && DB.produtos[i.pid]) paths['empregados/' + empId + '/tamanhos/' + grupoTamanho(DB.produtos[i.pid])] = i.tk; });
+    paths['entregas/' + entId] = {data:data, ts:nowTs(), empregadoId:empId, loc:loc, motivo:$('#e-mot').value, obs:$('#e-obs').value.trim(), itens:itens, usuario:currentUser.name};
     return save(paths, 'Entrega de EPI', (DB.empregados[empId] || {}).nome + ' — ' + itens.length + ' item(ns)').then(function(){ return entId; });
   }).then(function(entId){ closeModal(); toast('Entrega registrada.'); if(imprimir) setTimeout(function(){ printTermo(entId); }, 150); })
     .catch(function(e){ busy(btn, false); formError(e.message); });
@@ -1892,9 +1900,6 @@ function formEmpregado(id){
     field('Cargo', '<select id="m-car">'+optList(car, e.cargoId, 'Selecione...')+'</select>', '', car.length ? '' : 'Cadastre em Cadastros > Cargos') +
     field('Admissão', '<input type="date" id="m-adm" value="'+esc(e.admissao || '')+'">') +
     field('CPF', '<input id="m-cpf" value="'+esc(e.cpf || '')+'" placeholder="Opcional">') +
-    '</div><div class="section-label">Tamanhos</div><div class="modal-grid" style="grid-template-columns:repeat(4,1fr)">' +
-    field('Camisa / jaleco', '<input id="m-t-camisa" value="'+esc(t.camisa || '')+'" placeholder="P, M, G...">') + field('Calça', '<input id="m-t-calca" value="'+esc(t.calca || '')+'">') +
-    field('Calçado', '<input id="m-t-calcado" value="'+esc(t.calcado || '')+'" placeholder="38, 40...">') + field('Luva', '<input id="m-t-luva" value="'+esc(t.luva || '')+'">') +
     '</div><div class="modal-grid" style="margin-top:12px">' + field('Situação', '<select id="m-ativo">'+optList([['1','Ativo'],['0','Desligado']], e.ativo === false ? '0' : '1')+'</select>') + '</div>' +
     (id ? '<input type="hidden" id="m-id" value="'+id+'">' : '') + modalActions('Salvar', 'salvar-empregado'), 'wide');
 }
@@ -1903,7 +1908,6 @@ formHandlers['salvar-empregado'] = function(btn){
   var cpf = $('#m-cpf').value.replace(/\D/g, '');
   if(cpf && vals(DB.empregados).some(function(x){ return x._id !== id && x.cpf && x.cpf.replace(/\D/g, '') === cpf; })) return formError('Já existe um empregado com esse CPF.');
   var rec = Object.assign({}, id ? DB.empregados[id] : {}, {nome:nome, cpf:$('#m-cpf').value.trim(), empresaId:$('#m-emp').value, cliente:$('#m-cli').value.trim(), cargoId:$('#m-car').value, admissao:$('#m-adm').value,
-    tamanhos:{camisa:$('#m-t-camisa').value.trim().toUpperCase(), calca:$('#m-t-calca').value.trim().toUpperCase(), calcado:$('#m-t-calcado').value.trim().toUpperCase(), luva:$('#m-t-luva').value.trim().toUpperCase()},
     ativo:$('#m-ativo').value === '1', atualizadoEm:nowTs()});
   delete rec._id;
   var key = id || store.key(), p = {}; p['empregados/' + key] = rec;
@@ -1916,15 +1920,15 @@ function fichaEmpregado(id){
   var hist = vals(DB.entregas).filter(function(en){ return en.empregadoId === id && !en.cancelada; }).sort(function(a, b){ return b.ts - a.ts; });
   openModal('<div class="modal-title">'+esc(e.nome)+(e.ativo === false ? ' <span class="pill gray">Desligado</span>' : '')+'</div><div class="info-grid">' +
     '<div><div class="lbl">Empresa</div>'+esc(nomeEmpresa(e.empresaId))+'</div><div><div class="lbl">Cliente</div>'+esc(e.cliente || '—')+'</div><div><div class="lbl">Cargo</div>'+esc(nomeCargo(e.cargoId))+'</div><div><div class="lbl">Admissão</div>'+fmtD(e.admissao)+'</div>' +
-    '<div><div class="lbl">CPF</div>'+esc(e.cpf || '—')+'</div><div style="grid-column:span 3"><div class="lbl">Tamanhos</div>Camisa '+esc(t.camisa || '—')+' · Calça '+esc(t.calca || '—')+' · Calçado '+esc(t.calcado || '—')+' · Luva '+esc(t.luva || '—')+'</div></div>' +
+    '<div><div class="lbl">CPF</div>'+esc(e.cpf || '—')+'</div><div style="grid-column:span 3"><div class="lbl">Tamanhos (guardados nas entregas)</div>'+(tamanhosTxt(e) || '<span style="color:var(--text-faint)">Serão guardados na primeira entrega</span>')+'</div></div>' +
     '<div class="section-label">Itens em posse</div>' + (posse.length ? '<table class="items-table"><thead><tr><th>Item</th><th>Tam.</th><th class="num">Qtd</th><th>CA</th><th>Entregue</th><th>Troca prevista</th><th></th></tr></thead><tbody>' + posse.map(function(x){
       var d = daysUntil(x.item.proximaTroca);
       return '<tr><td>'+esc(nomeProd(x.item.pid))+'</td><td class="mono">'+esc(tamLabel(x.item.tk))+'</td><td class="num">'+x.aberto+'</td><td class="mono">'+esc(x.item.ca || '—')+'</td><td class="mono">'+fmtD(x.data)+'</td>' +
         '<td>'+(x.item.proximaTroca ? fmtD(x.item.proximaTroca) + ' <span class="pill '+(d < 0 ? 'red' : d <= +cfg('diasAlertaTroca', 15) ? 'amber' : 'gray')+'" style="padding:1px 7px;font-size:10.5px">'+(d < 0 ? 'vencida' : d + 'd')+'</span>' : '—')+'</td>' +
         '<td><button class="btn btn-sm" data-act="devolver" data-ent="'+x.entregaId+'" data-idx="'+x.idx+'"'+(can('entregar') ? '' : ' disabled')+'>Devolver</button></td></tr>';
     }).join('') + '</tbody></table>' : '<div style="color:var(--text-faint);font-size:12.5px">Nenhum item em posse.</div>') +
-    '<div class="section-label">Histórico de entregas</div>' + (hist.length ? '<table class="items-table"><thead><tr><th>Data</th><th>Itens</th><th>Motivo</th><th>Assinatura</th><th></th></tr></thead><tbody>' + hist.map(function(en){
-      return '<tr><td class="mono">'+fmtD(en.data)+'</td><td style="font-size:12px">'+(en.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk !== 'UN' ? ' (' + i.tk + ')' : '')) + (i.devolvido ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">dev. ' + i.devolvido + '</span>' : ''); }).join('<br>')+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'</td><td>'+(en.assinatura ? '<span class="pill teal">Sim</span>' : '<span class="pill amber">Não</span>')+'</td><td><button class="btn btn-sm" data-act="print-termo" data-id="'+en._id+'">Termo</button></td></tr>';
+    '<div class="section-label">Histórico de entregas</div>' + (hist.length ? '<table class="items-table"><thead><tr><th>Data</th><th>Itens</th><th>Motivo</th><th></th></tr></thead><tbody>' + hist.map(function(en){
+      return '<tr><td class="mono">'+fmtD(en.data)+'</td><td style="font-size:12px">'+(en.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk !== 'UN' ? ' (' + i.tk + ')' : '')) + (i.devolvido ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">dev. ' + i.devolvido + '</span>' : ''); }).join('<br>')+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'</td><td><button class="btn btn-sm" data-act="print-termo" data-id="'+en._id+'">Termo</button></td></tr>';
     }).join('') + '</tbody></table>' : '<div style="color:var(--text-faint);font-size:12.5px">Nenhuma entrega registrada.</div>') +
     '<div class="modal-actions"><button class="btn btn-ghost" data-act="fechar">Fechar</button>' +
     (can('empregados') ? '<button class="btn" data-act="editar-empregado" data-id="'+id+'">Editar</button>' : '') +
@@ -1937,8 +1941,8 @@ function fichaEmpregado(id){
 function formEmpresa(id){
   if(!can('cadastros')) return;
   var e = id ? DB.empresas[id] : {};
-  openModal('<div class="modal-title">'+(id ? 'Editar empresa' : 'Nova empresa / unidade')+'</div><div class="modal-grid">' +
-    field('Nome', '<input id="c-nome" value="'+esc(e.nome || '')+'" placeholder="Ex.: Femsa Marília">', 'full') + field('CNPJ', '<input id="c-cnpj" value="'+esc(e.cnpj || '')+'">') + field('Cidade', '<input id="c-cid" value="'+esc(e.cidade || '')+'">') +
+  openModal('<div class="modal-title">'+(id ? 'Editar empresa' : 'Nova empresa')+'</div><div class="modal-grid">' +
+    field('Nome', '<input id="c-nome" value="'+esc(e.nome || '')+'" placeholder="Ex.: Login Serv">', 'full') + field('CNPJ', '<input id="c-cnpj" value="'+esc(e.cnpj || '')+'">') + field('Cidade', '<input id="c-cid" value="'+esc(e.cidade || '')+'">') +
     '</div>' + (id ? '<input type="hidden" id="c-id" value="'+id+'">' : '') + modalActions('Salvar', 'salvar-empresa'));
 }
 formHandlers['salvar-empresa'] = function(btn){
@@ -2033,7 +2037,7 @@ function previewImport(rows){
   openModal('<div class="modal-title">Importar empregados</div><div class="modal-sub">'+importRows.length+' linhas lidas · '+novos+' novos · '+atual+' já cadastrados (serão atualizados). Empresas e cargos que não existirem serão criados.</div>' +
     '<div class="table-wrap" style="max-height:340px;overflow:auto"><table class="items-table"><thead><tr><th>Nome</th><th>Empresa</th><th>Cliente</th><th>Cargo</th><th>Admissão</th></tr></thead><tbody>' +
     importRows.slice(0, 200).map(function(r){ return '<tr><td>'+esc(r.nome)+(findExistente(r) ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">atualizar</span>' : '')+'</td><td>'+esc(r.empresa)+'</td><td>'+esc(r.cliente || '—')+'</td><td>'+esc(r.cargo)+'</td><td class="mono">'+fmtD(r.admissao)+'</td></tr>'; }).join('') +
-    '</tbody></table></div><div class="modal-sub" style="margin-top:10px">Colunas reconhecidas: Nome, CPF, Empresa, Cliente (ou Posto), Cargo, Admissão, Camisa, Calça, Calçado, Luva.</div>' + modalActions('Importar ' + importRows.length, 'confirmar-import'), 'wide');
+    '</tbody></table></div><div class="modal-sub" style="margin-top:10px">Colunas reconhecidas: Nome, CPF, Empresa, Cliente (ou Posto), Cargo, Admissão.</div>' + modalActions('Importar ' + importRows.length, 'confirmar-import'), 'wide');
 }
 function findExistente(r){
   return vals(DB.empregados).find(function(e){ return (r.cpf && e.cpf && e.cpf.replace(/\D/g, '') === r.cpf.replace(/\D/g, '')) || norm(e.nome) === norm(r.nome); });
@@ -2120,7 +2124,7 @@ function exportEntregas(){
   var rows = [];
   filtroEntregas().forEach(function(en){
     var e = DB.empregados[en.empregadoId] || {};
-    (en.itens || []).forEach(function(i){ rows.push({Data:fmtD(en.data), Empregado:e.nome, Empresa:nomeEmpresa(e.empresaId), Cliente:e.cliente || '', Cargo:nomeCargo(e.cargoId), Produto:nomeProd(i.pid), Tamanho:tamLabel(i.tk), Quantidade:i.qtd, CA:i.ca || '', 'Proxima troca':fmtD(i.proximaTroca), Devolvido:i.devolvido || 0, Motivo:en.motivo || '', Assinado:en.assinatura ? 'Sim' : 'Não', Responsavel:en.usuario || ''}); });
+    (en.itens || []).forEach(function(i){ rows.push({Data:fmtD(en.data), Empregado:e.nome, Empresa:nomeEmpresa(e.empresaId), Cliente:e.cliente || '', Cargo:nomeCargo(e.cargoId), Produto:nomeProd(i.pid), Tamanho:tamLabel(i.tk), Quantidade:i.qtd, CA:i.ca || '', 'Proxima troca':fmtD(i.proximaTroca), Devolvido:i.devolvido || 0, Motivo:en.motivo || '', Responsavel:en.usuario || ''}); });
   });
   exportXlsx('entregas-epi', rows);
 }
@@ -2293,7 +2297,7 @@ function cmpFiltrar(){
     if(cmpFiltro === 'encerradas' && e !== 'reprovada' && e !== 'cancelada') return false;
     if(['cotacao','aguardando','aprovada','pedido','recebida'].indexOf(cmpFiltro) !== -1 && e !== cmpFiltro) return false;
     if(un && c.unidadeId !== un) return false;
-    if(q){ var k = cmpCalc(c); if(norm([cmpNumero(c), c.item, c.solicitante, nomeEmpresa(c.unidadeId), k.escolhida ? k.escolhida.fornecedor : '', (c.cotacoes || []).map(function(x){ return x && x.fornecedor; }).join(' '), c.pedidoNumero].join(' ')).indexOf(q) === -1) return false; }
+    if(q){ var k = cmpCalc(c); if(norm([cmpNumero(c), c.item, c.solicitante, nomeCentro(c.unidadeId), k.escolhida ? k.escolhida.fornecedor : '', (c.cotacoes || []).map(function(x){ return x && x.fornecedor; }).join(' '), c.pedidoNumero].join(' ')).indexOf(q) === -1) return false; }
     return true;
   }).sort(function(a, b){ return (b.numero || 0) - (a.numero || 0); });
 }
@@ -2331,7 +2335,7 @@ function renderCompras(){
         '<td><span class="mono" style="color:var(--text)">'+cmpNumero(c)+'</span><span class="sub">'+fmtD(fmtISO(c.criadoEm))+' · '+esc(c.solicitante || '')+'</span></td>' +
         '<td class="wrap">'+esc(c.item)+(c.urgente ? ' <span class="pill red" style="padding:1px 7px;font-size:10.5px">Urgente</span>' : '')+'</td>' +
         '<td class="num">'+fmtN(c.qtd)+' <span style="color:var(--text-faint)">'+esc(c.unidade || '')+'</span></td>' +
-        '<td>'+esc(nomeEmpresa(c.unidadeId))+'</td>' +
+        '<td>'+esc(nomeCentro(c.unidadeId))+'</td>' +
         '<td class="mono '+necCls+'">'+fmtD(c.necessidade)+'</td>' +
         '<td>'+chips+'</td>' +
         '<td>'+(k.escolhida ? esc(k.escolhida.fornecedor) : '<span style="color:var(--text-faint)">—</span>')+'</td>' +
@@ -2363,7 +2367,6 @@ function formCompra(id, pidPrefill){
   var e = novo ? 'cotacao' : cmpEtapa(c);
   var edSol = novo || cmpPodeEditarSolic(c), edCot = !novo && (e === 'cotacao' || e === 'reprovada') && can('comprar');
   var dis = function(b){ return b ? '' : ' disabled'; };
-  var empresas = vals(DB.empresas).sort(byName).map(function(x){ return [x._id, x.nome]; });
 
   // Linha do tempo do processo
   var passos = ['Solicitação','Cotação','Aprovação','Pedido','Recebimento'];
@@ -2380,7 +2383,7 @@ function formCompra(id, pidPrefill){
       field('Item', '<input id="c-item" list="dl-produtos" value="'+esc(c.item || '')+'" placeholder="Produto do estoque ou descrição livre"'+dis(edSol)+'>', 'full', 'Se for um produto do estoque, escolha da lista: no recebimento ele entra no saldo automaticamente.') +
       field('Quantidade', '<input type="number" id="c-qtd" min="1" step="1" value="'+esc(c.qtd || 1)+'"'+dis(edSol)+'>') +
       field('Unidade', '<select id="c-un"'+dis(edSol)+'>'+optList(unidadesOpts(c.unidade), (c.unidade || 'UN').toUpperCase())+'</select>') +
-      field('Centro / unidade', '<select id="c-unid"'+dis(edSol)+'>'+optList(empresas, c.unidadeId, 'Selecione...')+'</select>', '', empresas.length ? '' : 'Cadastre em Cadastros → Centros / unidades') +
+      field('Centro / unidade', '<select id="c-unid"'+dis(edSol)+'>'+centrosOptsHtml(c.unidadeId)+'</select>', '', 'Cliente ou empresa que vai usar o item') +
       field('Necessário até', '<input type="date" id="c-nec" value="'+esc(c.necessidade || '')+'"'+dis(edSol)+'>') +
       field('Prioridade', '<select id="c-urg"'+dis(edSol)+'>'+optList([['0','Normal'],['1','Urgente']], c.urgente ? '1' : '0')+'</select>') +
       field('Justificativa / necessidade', '<input id="c-just" value="'+esc(c.justificativa || '')+'" placeholder="Para que e por que precisa"'+dis(edSol)+'>') +
@@ -2616,13 +2619,100 @@ formHandlers['cmp-cancelar'] = function(btn){
 formHandlers['export-compras'] = function(){
   exportXlsx('compras', cmpFiltrar().map(function(c){
     var k = cmpCalc(c), q = function(i){ var x = k.qs.find(function(z){ return z.i === i; }); return x ? x.fornecedor + ' — ' + fmtR(x.preco) : ''; };
-    return {'Solicitação':cmpNumero(c), 'Data':fmtD(fmtISO(c.criadoEm)), 'Solicitante':c.solicitante || '', 'Item':c.item, 'Quantidade':+c.qtd, 'Unidade':c.unidade || '', 'Centro / unidade':nomeEmpresa(c.unidadeId) === '—' ? '' : nomeEmpresa(c.unidadeId),
+    return {'Solicitação':cmpNumero(c), 'Data':fmtD(fmtISO(c.criadoEm)), 'Solicitante':c.solicitante || '', 'Item':c.item, 'Quantidade':+c.qtd, 'Unidade':c.unidade || '', 'Centro / unidade':c.unidadeId ? nomeCentro(c.unidadeId) : '',
       'Necessidade':fmtD(c.necessidade), 'Urgente':c.urgente ? 'Sim' : 'Não', 'Justificativa':c.justificativa || '', 'Cotação 1':q(0), 'Cotação 2':q(1), 'Cotação 3':q(2),
       'Fornecedor escolhido':k.escolhida ? k.escolhida.fornecedor : '', 'Preço unitário':k.escolhida ? k.escolhida.preco : '', 'Preço total':k.escolhida ? Math.round(k.total * 100) / 100 : '', 'Prazo de pagamento':k.escolhida ? k.escolhida.prazoPgto : '',
       'Economia (R$)':Math.round(k.economia * 100) / 100, 'Economia (%)':k.economia ? Math.round(k.economiaPct * 10) / 10 : 0,
       'Status da aprovação':({cotacao:'Em cotação', aguardando:'Aguardando aprovação', aprovada:'Aprovada', reprovada:'Reprovada'})[c.aprovacao || 'cotacao'], 'Aprovado por':c.aprovadoPor || '',
       'Status da compra':({pendente:'Não iniciada', pedido:'Pedido emitido', recebida:'Recebida', cancelada:'Cancelada'})[c.compra || 'pendente'], 'Nº pedido':c.pedidoNumero || '', 'Entrega prevista':fmtD(c.entregaPrevista), 'Recebida em':fmtD(c.recebidoEm), 'NF':c.nf || ''};
   }));
+};
+
+// =====================================================================
+// CLIENTES (postos / tomadores onde os colaboradores trabalham)
+// O cadastro é alimentado sozinho a partir do campo "Cliente" dos empregados.
+// A chave é fixa pelo nome (cli_<nome>), então nunca duplica, mesmo com vários usuários.
+// =====================================================================
+function cliKey(nome){ return 'cli_' + norm(nome).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80); }
+function nomeCliente(id){ return (DB.clientes[id] || {}).nome || ''; }
+// Nome de um "centro" usado em compras/relatórios: pode ser cliente ou empresa
+function nomeCentro(id){ return id ? (nomeCliente(id) || nomeEmpresa(id)) : '—'; }
+function empregadosDoCliente(nome, soAtivos){
+  var k = norm(nome);
+  return vals(DB.empregados).filter(function(e){ return norm(e.cliente) === k && (!soAtivos || e.ativo !== false); });
+}
+
+var syncClientesRodando = false;
+function syncClientes(){
+  if(syncClientesRodando || !currentUser || !can('cadastros') || !DB_LOADED.clientes || !DB_LOADED.empregados) return;
+  var faltando = {};
+  vals(DB.empregados).forEach(function(e){
+    var nome = (e.cliente || '').trim(); if(!nome) return;
+    var k = cliKey(nome); if(!DB.clientes[k] && !faltando[k]) faltando[k] = nome;
+  });
+  var ks = Object.keys(faltando); if(!ks.length) return;
+  var p = {};
+  // grava só o nome (caminho folha): se outro usuário já criou com CNPJ/cidade, nada é perdido
+  ks.forEach(function(k){ p['clientes/' + k + '/nome'] = faltando[k]; });
+  syncClientesRodando = true;
+  store.update(p).then(function(){ syncClientesRodando = false; }, function(){ syncClientesRodando = false; });
+}
+
+// <select> de centro (compras): clientes e empresas agrupados
+function centrosOptsHtml(sel, vazio){
+  var cl = vals(DB.clientes).sort(byName), em = vals(DB.empresas).sort(byName);
+  function o(x){ return '<option value="'+esc(x._id)+'"'+(x._id === sel ? ' selected' : '')+'>'+esc(x.nome)+'</option>'; }
+  return '<option value="">'+esc(vazio || 'Selecione...')+'</option>' +
+    (cl.length ? '<optgroup label="Clientes">' + cl.map(o).join('') + '</optgroup>' : '') +
+    (em.length ? '<optgroup label="Empresas">' + em.map(o).join('') + '</optgroup>' : '');
+}
+
+function renderClientesTab(){
+  syncClientes();
+  var l = vals(DB.clientes).sort(byName);
+  if(!l.length) return emptyState('Os clientes aparecem aqui sozinhos a partir do campo "Cliente" dos colaboradores. Importe a planilha do RH ou preencha o cliente no cadastro do empregado.');
+  var emps = {};
+  vals(DB.empregados).forEach(function(e){ if(e.ativo === false || !e.cliente) return; var k = cliKey(e.cliente); (emps[k] = emps[k] || {total:0, por:{}}).total++; var en = nomeEmpresa(e.empresaId); emps[k].por[en] = (emps[k].por[en] || 0) + 1; });
+  var tot = l.reduce(function(s, c){ return s + ((emps[c._id] || {}).total || 0); }, 0);
+  return '<table><thead><tr><th>Cliente</th><th>Empresa(s)</th><th>CNPJ</th><th>Cidade</th><th class="num">Colaboradores ativos</th></tr></thead><tbody>' + l.map(function(c){
+    var x = emps[c._id] || {total:0, por:{}};
+    var por = Object.keys(x.por).sort().map(function(n){ return '<span class="chip">'+esc(n)+' <b>'+x.por[n]+'</b></span>'; }).join('');
+    return '<tr class="row-clickable" data-act="editar-cliente" data-id="'+c._id+'"><td>'+esc(c.nome)+'</td><td><div class="chips">'+(por || '<span style="color:var(--text-faint)">—</span>')+'</div></td>' +
+      '<td class="mono">'+esc(c.cnpj || '—')+'</td><td>'+esc(c.cidade || '—')+'</td><td class="num">'+x.total+'</td></tr>';
+  }).join('') + '</tbody></table><div class="tbl-foot">'+l.length+' clientes · '+tot+' colaboradores ativos · a lista é atualizada sozinha a partir do cadastro dos colaboradores</div>';
+}
+
+function formCliente(id){
+  if(!can('cadastros')) return;
+  var c = id ? DB.clientes[id] : {}, n = id ? empregadosDoCliente(c.nome).length : 0;
+  openModal('<div class="modal-title">'+(id ? 'Editar cliente' : 'Novo cliente')+'</div>' + (id ? '<div class="modal-sub">'+n+' colaborador(es) vinculado(s). Ao renomear, o nome também muda no cadastro deles.</div>' : '') +
+    '<div class="modal-grid">' + field('Nome', '<input id="c-nome" value="'+esc(c.nome || '')+'" placeholder="Ex.: FEMSA MARILIA">', 'full') +
+    field('CNPJ', '<input id="c-cnpj" value="'+esc(c.cnpj || '')+'">') + field('Cidade', '<input id="c-cid" value="'+esc(c.cidade || '')+'">') + '</div>' +
+    (id ? '<input type="hidden" id="c-id" value="'+id+'">' : '') +
+    modalActions('Salvar', 'salvar-cliente', id && !n && can('admin') ? '<button class="btn btn-danger" data-act="excluir-cliente" data-id="'+id+'" style="margin-right:auto">Excluir</button>' : ''));
+}
+formHandlers['editar-cliente'] = function(el){ formCliente(el.dataset.id); };
+formHandlers['salvar-cliente'] = function(btn){
+  var id = ($('#c-id') || {}).value, nome = $('#c-nome').value.trim(); if(!nome) return formError('Informe o nome.');
+  var novaKey = cliKey(nome);
+  if(novaKey !== id && DB.clientes[novaKey]) return formError('Já existe um cliente com esse nome.');
+  var antigo = id ? DB.clientes[id] : null, p = {};
+  var rec = {nome: nome, cnpj: $('#c-cnpj').value.trim(), cidade: $('#c-cid').value.trim()};
+  p['clientes/' + novaKey] = rec;
+  if(antigo && novaKey !== id){
+    p['clientes/' + id] = null;
+    // renomeia nos colaboradores e mantém as compras apontando para o cliente novo
+    empregadosDoCliente(antigo.nome).forEach(function(e){ p['empregados/' + e._id + '/cliente'] = nome; });
+    vals(DB.compras).forEach(function(c){ if(c.unidadeId === id) p['compras/' + c._id + '/unidadeId'] = novaKey; });
+  }
+  busy(btn, true);
+  save(p, antigo ? 'Cliente alterado' : 'Cliente criado', (antigo && antigo.nome !== nome ? antigo.nome + ' → ' : '') + nome)
+    .then(function(){ closeModal(); toast('Cliente salvo.'); }).catch(function(e){ busy(btn, false); formError(e.message); });
+};
+formHandlers['excluir-cliente'] = function(el){
+  if(!confirmInline(el, 'Confirmar exclusão')) return;
+  var p = {}; p['clientes/' + el.dataset.id] = null;
+  save(p, 'Cliente excluído', nomeCliente(el.dataset.id)).then(function(){ closeModal(); toast('Cliente excluído.'); });
 };
 
 LOGO_SRC = document.querySelector('.brand-logo-img').getAttribute('src');
