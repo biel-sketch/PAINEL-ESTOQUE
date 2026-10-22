@@ -5,8 +5,8 @@ function prHead(titulo){
   return '<div class="pr-head"><img src="'+LOGO_SRC+'" alt=""><div class="pr-title">'+esc(titulo)+'<div style="font-size:11px;font-weight:normal">'+esc(cfg('empresaTermo', 'Grupo Login Serv'))+'</div></div></div>';
 }
 function prEmpInfo(e){
-  return '<div class="pr-info"><div><b>Empregado</b>'+esc(e.nome)+'</div><div><b>Matrícula</b>'+esc(e.matricula || '—')+'</div><div><b>CPF</b>'+esc(e.cpf || '—')+'</div>' +
-    '<div><b>Empresa / unidade</b>'+esc(nomeEmpresa(e.empresaId))+'</div><div><b>Cargo</b>'+esc(nomeCargo(e.cargoId))+'</div><div><b>Setor</b>'+esc(e.setor || '—')+'</div></div>';
+  return '<div class="pr-info"><div><b>Empregado</b>'+esc(e.nome)+'</div><div><b>CPF</b>'+esc(e.cpf || '—')+'</div><div><b>Cargo</b>'+esc(nomeCargo(e.cargoId))+'</div>' +
+    '<div><b>Empresa</b>'+esc(nomeEmpresa(e.empresaId))+'</div><div><b>Cliente</b>'+esc(e.cliente || '—')+'</div><div><b>Admissão</b>'+fmtD(e.admissao)+'</div></div>';
 }
 var TEXTO_NR6 = 'Declaro ter recebido gratuitamente da empresa os Equipamentos de Proteção Individual (EPI) e/ou uniformes relacionados abaixo, em perfeito estado de conservação e funcionamento, ' +
   'e ter sido orientado(a) e treinado(a) sobre o uso adequado, a guarda e a conservação. Comprometo-me, conforme a NR-6 e o art. 158 da CLT, a: (a) usá-los apenas para a finalidade a que se destinam; ' +
@@ -64,7 +64,7 @@ function exportEntregas(){
   var rows = [];
   filtroEntregas().forEach(function(en){
     var e = DB.empregados[en.empregadoId] || {};
-    (en.itens || []).forEach(function(i){ rows.push({Data:fmtD(en.data), Empregado:e.nome, Matricula:e.matricula || '', Empresa:nomeEmpresa(e.empresaId), Cargo:nomeCargo(e.cargoId), Produto:nomeProd(i.pid), Tamanho:tamLabel(i.tk), Quantidade:i.qtd, CA:i.ca || '', 'Proxima troca':fmtD(i.proximaTroca), Devolvido:i.devolvido || 0, Motivo:en.motivo || '', Assinado:en.assinatura ? 'Sim' : 'Não', Responsavel:en.usuario || ''}); });
+    (en.itens || []).forEach(function(i){ rows.push({Data:fmtD(en.data), Empregado:e.nome, Empresa:nomeEmpresa(e.empresaId), Cliente:e.cliente || '', Cargo:nomeCargo(e.cargoId), Produto:nomeProd(i.pid), Tamanho:tamLabel(i.tk), Quantidade:i.qtd, CA:i.ca || '', 'Proxima troca':fmtD(i.proximaTroca), Devolvido:i.devolvido || 0, Motivo:en.motivo || '', Assinado:en.assinatura ? 'Sim' : 'Não', Responsavel:en.usuario || ''}); });
   });
   exportXlsx('entregas-epi', rows);
 }

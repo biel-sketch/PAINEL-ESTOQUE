@@ -164,8 +164,9 @@
     <section class="view" id="view-empregados">
       <div class="topbar"><div class="page-title">Empregados</div><div class="page-date page-date-js"></div></div>
       <div class="toolbar">
-        <input class="tb-input search" id="emp-busca" placeholder="Buscar nome, matrícula, CPF...">
+        <input class="tb-input search" id="emp-busca" placeholder="Buscar nome, cliente, CPF...">
         <select class="tb-select sel-empresas" id="emp-empresa" data-all="Todas as empresas"></select>
+        <select class="tb-select" id="emp-cliente"><option value="">Todos os clientes</option></select>
         <select class="tb-select" id="emp-status"><option value="ativos">Ativos</option><option value="inativos">Desligados</option><option value="">Todos</option></select>
         <span class="spacer"></span>
         <button class="btn" data-act="export-empregados">Exportar Excel</button>
@@ -244,5 +245,6 @@
 <div class="toast" id="toast"></div>
 <datalist id="dl-produtos"></datalist>
 <datalist id="dl-empregados"></datalist>
+<datalist id="dl-clientes"></datalist>
 <input type="file" id="file-import" accept=".xlsx,.xls,.csv" style="display:none">
 <div id="print-area"></div>

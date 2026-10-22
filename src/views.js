@@ -90,7 +90,7 @@ function initUI(){
   });
   // filtros: re-renderiza a tabela ao digitar/alterar
   ['est-busca','est-cat','est-local','est-zerados','est-minimo','mov-busca','mov-tipo','mov-de','mov-ate','prod-busca','prod-cat','prod-status',
-   'ent-busca','ent-empresa','ent-de','ent-ate','emp-busca','emp-empresa','emp-status','rel-de','rel-ate','rel-empresa','rel-cat','cmp-busca','cmp-unidade'].forEach(function(id){
+   'ent-busca','ent-empresa','ent-de','ent-ate','emp-busca','emp-empresa','emp-cliente','emp-status','rel-de','rel-ate','rel-empresa','rel-cat','cmp-busca','cmp-unidade'].forEach(function(id){
     var el = $('#' + id); if(!el) return;
     el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' || el.type === 'date' ? 'change' : 'input', function(){ renderView(curView); });
   });
@@ -129,10 +129,14 @@ function fillSelects(){
     s.value = v;
   });
   $('#dl-produtos').innerHTML = vals(DB.produtos).filter(function(p){ return p.ativo !== false; }).sort(byName).map(function(p){ return '<option value="'+esc(prodLabel(p))+'"></option>'; }).join('');
+  var clientes = {}; vals(DB.empregados).forEach(function(e){ if(e.cliente) clientes[e.cliente.trim().toUpperCase()] = e.cliente.trim(); });
+  var cl = Object.keys(clientes).sort().map(function(k){ return clientes[k]; });
+  $('#dl-clientes').innerHTML = cl.map(function(c){ return '<option value="'+esc(c)+'">'; }).join('');
+  var sc = $('#emp-cliente'); if(sc){ var v = sc.value; sc.innerHTML = '<option value="">Todos os clientes</option>' + cl.map(function(c){ return '<option value="'+esc(c)+'">'+esc(c)+'</option>'; }).join(''); sc.value = v; }
   $('#dl-empregados').innerHTML = vals(DB.empregados).filter(function(e){ return e.ativo !== false; }).sort(byName).map(function(e){ return '<option value="'+esc(empLabel(e))+'"></option>'; }).join('');
 }
 function prodLabel(p){ return p.nome + (p.ca ? ' · CA ' + p.ca : ''); }
-function empLabel(e){ return e.nome + (e.matricula ? ' · ' + e.matricula : ''); }
+function empLabel(e){ return e.nome + (e.cliente ? ' · ' + e.cliente : ''); }
 function findProdByLabel(l){ l = norm(l); if(!l) return null; var p = vals(DB.produtos).find(function(p){ return norm(prodLabel(p)) === l; }) || vals(DB.produtos).find(function(p){ return norm(p.nome) === l; }); return p ? p._id : null; }
 function findEmpByLabel(l){ l = norm(l); if(!l) return null; var e = vals(DB.empregados).find(function(e){ return norm(empLabel(e)) === l; }) || vals(DB.empregados).find(function(e){ return norm(e.nome) === l; }); return e ? e._id : null; }
 function nomeEmpresa(id){ return (DB.empresas[id] || {}).nome || '—'; }
@@ -348,7 +352,7 @@ function filtroEntregas(){
     if(de && en.data < de) return false; if(ate && en.data > ate) return false;
     var e = DB.empregados[en.empregadoId] || {};
     if(emp && e.empresaId !== emp) return false;
-    if(q && norm(e.nome + ' ' + (e.matricula || '') + ' ' + (en.itens || []).map(function(i){ return nomeProd(i.pid); }).join(' ')).indexOf(q) === -1) return false;
+    if(q && norm(e.nome + ' ' + (e.cliente || '') + ' ' + (en.itens || []).map(function(i){ return nomeProd(i.pid); }).join(' ')).indexOf(q) === -1) return false;
     return true;
   }).sort(function(a, b){ return b.ts - a.ts; });
 }
@@ -359,7 +363,7 @@ function renderEntregas(){
     list.map(function(en){
       var e = DB.empregados[en.empregadoId] || {};
       var itens = (en.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk && i.tk !== 'UN' ? ' (' + i.tk + ')' : '')); }).join('<br>');
-      return '<tr><td class="mono">'+fmtD(en.data)+'</td><td><a href="#" data-act="ficha-empregado" data-id="'+en.empregadoId+'" style="color:var(--text)">'+esc(e.nome || '—')+'</a><span class="sub">'+esc(nomeEmpresa(e.empresaId))+'</span></td>' +
+      return '<tr><td class="mono">'+fmtD(en.data)+'</td><td><a href="#" data-act="ficha-empregado" data-id="'+en.empregadoId+'" style="color:var(--text)">'+esc(e.nome || '—')+'</a><span class="sub">'+esc(nomeEmpresa(e.empresaId))+(e.cliente ? ' · ' + esc(e.cliente) : '')+'</span></td>' +
         '<td style="font-size:12px">'+itens+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'</td><td>'+(en.assinatura ? '<span class="pill teal">Assinado</span>' : '<span class="pill amber">Pendente</span>')+'</td>' +
         '<td class="mono">'+esc(en.usuario || '')+'</td><td style="white-space:nowrap"><button class="btn btn-sm" data-act="print-termo" data-id="'+en._id+'">Termo</button></td></tr>';
     }).join('') + '</tbody></table><div class="tbl-foot">'+list.length+' entregas</div>';
@@ -370,23 +374,25 @@ function renderEntregas(){
 // =====================================================================
 function renderEmpregados(){
   var q = norm($('#emp-busca').value), emp = $('#emp-empresa').value, st = $('#emp-status').value;
+  var cli = ($('#emp-cliente') || {}).value || '';
   var posse = {}; itensEmPosse(null).forEach(function(x){ (posse[x.empregadoId] = posse[x.empregadoId] || []).push(x); });
   var rows = vals(DB.empregados).filter(function(e){
     if(st === 'ativos' && e.ativo === false) return false;
     if(st === 'inativos' && e.ativo !== false) return false;
     if(emp && e.empresaId !== emp) return false;
-    if(q && norm([e.nome, e.matricula, e.cpf, e.setor].join(' ')).indexOf(q) === -1) return false;
+    if(cli && norm(e.cliente) !== norm(cli)) return false;
+    if(q && norm([e.nome, e.cliente, e.cpf].join(' ')).indexOf(q) === -1) return false;
     return true;
   }).sort(byName);
   if(!rows.length){ $('#emp-table').innerHTML = emptyState(vals(DB.empregados).length ? 'Nenhum empregado com esses filtros.' : 'Nenhum empregado cadastrado. Cadastre manualmente ou importe uma planilha do RH.'); return; }
-  $('#emp-table').innerHTML = '<table><thead><tr><th>Nome</th><th>Matrícula</th><th>Empresa / setor</th><th>Cargo</th><th class="num">Itens em posse</th><th>Próxima troca</th><th></th></tr></thead><tbody>' +
+  $('#emp-table').innerHTML = '<table><thead><tr><th>Nome</th><th>Empresa</th><th>Cliente</th><th>Cargo</th><th class="num">Itens em posse</th><th>Próxima troca</th><th></th></tr></thead><tbody>' +
     rows.map(function(e){
       var p = posse[e._id] || [];
       var prox = p.filter(function(x){ return x.item.proximaTroca; }).sort(function(a, b){ return a.item.proximaTroca < b.item.proximaTroca ? -1 : 1; })[0];
       var proxHtml = '—';
       if(prox){ var d = daysUntil(prox.item.proximaTroca); proxHtml = fmtD(prox.item.proximaTroca) + ' <span class="pill '+(d < 0 ? 'red' : d <= +cfg('diasAlertaTroca', 15) ? 'amber' : 'gray')+'" style="padding:1px 7px;font-size:10.5px">'+(d < 0 ? 'vencida' : d + 'd')+'</span><span class="sub">'+esc(nomeProd(prox.item.pid))+'</span>'; }
-      return '<tr class="row-clickable" data-act="ficha-empregado" data-id="'+e._id+'"><td>'+esc(e.nome)+(e.ativo === false ? ' <span class="pill gray">Desligado</span>' : '')+'</td><td class="mono">'+esc(e.matricula || '—')+'</td>' +
-        '<td>'+esc(nomeEmpresa(e.empresaId))+(e.setor ? '<span class="sub">'+esc(e.setor)+'</span>' : '')+'</td><td>'+esc(nomeCargo(e.cargoId))+'</td><td class="num">'+p.reduce(function(s, x){ return s + x.aberto; }, 0)+'</td><td>'+proxHtml+'</td>' +
+      return '<tr class="row-clickable" data-act="ficha-empregado" data-id="'+e._id+'"><td>'+esc(e.nome)+(e.ativo === false ? ' <span class="pill gray">Desligado</span>' : '')+'</td>' +
+        '<td>'+esc(nomeEmpresa(e.empresaId))+'</td><td>'+esc(e.cliente || '—')+'</td><td>'+esc(nomeCargo(e.cargoId))+'</td><td class="num">'+p.reduce(function(s, x){ return s + x.aberto; }, 0)+'</td><td>'+proxHtml+'</td>' +
         '<td><button class="btn btn-sm need-entregar" data-act="nova-entrega" data-id="'+e._id+'"'+(can('entregar') && e.ativo !== false ? '' : ' disabled')+'>Entregar</button></td></tr>';
     }).join('') + '</tbody></table><div class="tbl-foot">'+rows.length+' empregados</div>';
 }
@@ -406,7 +412,7 @@ function renderValidade(){
   if(t === 'trocas'){
     h = trocas.length ? '<table><thead><tr><th>Empregado</th><th>Item</th><th>Tam.</th><th>Entregue em</th><th>Troca prevista</th><th>Situação</th><th></th></tr></thead><tbody>' + trocas.map(function(x){
       var e = DB.empregados[x.empregadoId] || {}, d = daysUntil(x.item.proximaTroca);
-      return '<tr><td>'+esc(e.nome)+'<span class="sub">'+esc(nomeEmpresa(e.empresaId))+'</span></td><td>'+esc(nomeProd(x.item.pid))+'</td><td class="mono">'+esc(tamLabel(x.item.tk))+'</td><td class="mono">'+fmtD(x.data)+'</td><td class="mono">'+fmtD(x.item.proximaTroca)+'</td>' +
+      return '<tr><td>'+esc(e.nome)+'<span class="sub">'+esc(nomeEmpresa(e.empresaId))+(e.cliente ? ' · ' + esc(e.cliente) : '')+'</span></td><td>'+esc(nomeProd(x.item.pid))+'</td><td class="mono">'+esc(tamLabel(x.item.tk))+'</td><td class="mono">'+fmtD(x.data)+'</td><td class="mono">'+fmtD(x.item.proximaTroca)+'</td>' +
         '<td><span class="pill '+(d < 0 ? 'red' : 'amber')+'">'+(d < 0 ? 'Vencida há ' + (-d) + 'd' : (d === 0 ? 'Hoje' : 'Em ' + d + 'd'))+'</span></td>' +
         '<td><button class="btn btn-sm" data-act="nova-entrega" data-id="'+x.empregadoId+'"'+(can('entregar') ? '' : ' disabled')+'>Trocar</button></td></tr>';
     }).join('') + '</tbody></table>' : emptyState('Nenhuma troca vencida ou próxima.');

@@ -49,7 +49,7 @@ function handleAction(a, el){
     case 'export-movs': exportXlsx('movimentacoes', filtroMovs().map(function(m){ var e = DB.empregados[m.empregadoId] || {}; var p = DB.produtos[m.pid] || {}; return {Data:fmtD(m.data), Tipo:(MOV_TIPOS[m.tipo] || {}).label || m.tipo, Produto:p.nome, CA:p.ca || '', Tamanho:tamLabel(m.tk), Quantidade:m.qtd * (((MOV_TIPOS[m.tipo] || {}).sinal) === -1 ? -1 : 1), 'Afeta saldo':((MOV_TIPOS[m.tipo] || {}).sinal) === 0 ? 'Não' : 'Sim', Local:nomeLocal(m.loc), Empregado:e.nome || '', Fornecedor:m.fornecedor || '', NF:m.doc || '', Motivo:m.motivo || '', 'Custo unit.':m.custoUnit || '', Usuario:m.usuario}; })); break;
     case 'export-produtos': exportXlsx('produtos', vals(DB.produtos).sort(byName).map(function(p){ return {Produto:p.nome, Categoria:p.categoria, CA:p.ca || '', 'Validade CA':fmtD(p.validadeCA), Fabricante:p.fabricante || '', 'Vida util (dias)':p.vidaUtilDias || '', Tamanhos:(p.tamanhos || []).join(', '), 'Estoque minimo':p.estoqueMinimo || 0, Custo:p.custo || 0, Saldo:saldoProduto(p._id), Ativo:p.ativo === false ? 'Não' : 'Sim'}; })); break;
     case 'export-entregas': exportEntregas(); break;
-    case 'export-empregados': exportXlsx('empregados', vals(DB.empregados).sort(byName).map(function(e){ var t = e.tamanhos || {}; return {Nome:e.nome, Matricula:e.matricula || '', CPF:e.cpf || '', Empresa:nomeEmpresa(e.empresaId), Setor:e.setor || '', Cargo:nomeCargo(e.cargoId), Admissao:fmtD(e.admissao), Camisa:t.camisa || '', Calca:t.calca || '', Calcado:t.calcado || '', Luva:t.luva || '', Situacao:e.ativo === false ? 'Desligado' : 'Ativo', 'Itens em posse':itensEmPosse(e._id).reduce(function(s, x){ return s + x.aberto; }, 0)}; })); break;
+    case 'export-empregados': exportXlsx('empregados', vals(DB.empregados).sort(byName).map(function(e){ var t = e.tamanhos || {}; return {Nome:e.nome, CPF:e.cpf || '', Empresa:nomeEmpresa(e.empresaId), Cliente:e.cliente || '', Cargo:nomeCargo(e.cargoId), Admissao:fmtD(e.admissao), Camisa:t.camisa || '', Calca:t.calca || '', Calcado:t.calcado || '', Luva:t.luva || '', Situacao:e.ativo === false ? 'Desligado' : 'Ativo', 'Itens em posse':itensEmPosse(e._id).reduce(function(s, x){ return s + x.aberto; }, 0)}; })); break;
     case 'rel-export': if(relData && relData.rows) exportXlsx(relData.nome, relData.rows); else toast('Nada para exportar nesta aba.', 'err'); break;
     case 'rel-print': printRelatorio(); break;
     default:
@@ -472,10 +472,11 @@ function formEmpregado(id){
   var emp = vals(DB.empresas).sort(byName).map(function(x){ return [x._id, x.nome]; }), car = vals(DB.cargos).sort(byName).map(function(x){ return [x._id, x.nome]; });
   openModal('<div class="modal-title">'+(id ? 'Editar empregado' : 'Novo empregado')+'</div><div class="modal-grid">' +
     field('Nome completo', '<input id="m-nome" value="'+esc(e.nome || '')+'">', 'full') +
-    field('Matrícula', '<input id="m-mat" value="'+esc(e.matricula || '')+'">') + field('CPF', '<input id="m-cpf" value="'+esc(e.cpf || '')+'" placeholder="Opcional">') +
-    field('Empresa / unidade', '<select id="m-emp">'+optList(emp, e.empresaId, 'Selecione...')+'</select>', '', emp.length ? '' : 'Cadastre em Cadastros > Empresas') +
+    field('Empresa', '<select id="m-emp">'+optList(emp, e.empresaId, 'Selecione...')+'</select>', '', emp.length ? '' : 'Cadastre em Cadastros > Centros / unidades') +
+    field('Cliente', '<input id="m-cli" list="dl-clientes" value="'+esc(e.cliente || '')+'" placeholder="Onde trabalha (posto / tomador)">') +
     field('Cargo', '<select id="m-car">'+optList(car, e.cargoId, 'Selecione...')+'</select>', '', car.length ? '' : 'Cadastre em Cadastros > Cargos') +
-    field('Setor', '<input id="m-set" value="'+esc(e.setor || '')+'">') + field('Admissão', '<input type="date" id="m-adm" value="'+esc(e.admissao || '')+'">') +
+    field('Admissão', '<input type="date" id="m-adm" value="'+esc(e.admissao || '')+'">') +
+    field('CPF', '<input id="m-cpf" value="'+esc(e.cpf || '')+'" placeholder="Opcional">') +
     '</div><div class="section-label">Tamanhos</div><div class="modal-grid" style="grid-template-columns:repeat(4,1fr)">' +
     field('Camisa / jaleco', '<input id="m-t-camisa" value="'+esc(t.camisa || '')+'" placeholder="P, M, G...">') + field('Calça', '<input id="m-t-calca" value="'+esc(t.calca || '')+'">') +
     field('Calçado', '<input id="m-t-calcado" value="'+esc(t.calcado || '')+'" placeholder="38, 40...">') + field('Luva', '<input id="m-t-luva" value="'+esc(t.luva || '')+'">') +
@@ -484,9 +485,9 @@ function formEmpregado(id){
 }
 formHandlers['salvar-empregado'] = function(btn){
   var id = ($('#m-id') || {}).value, nome = $('#m-nome').value.trim(); if(!nome) return formError('Informe o nome.');
-  var mat = $('#m-mat').value.trim();
-  if(mat && vals(DB.empregados).some(function(x){ return x._id !== id && x.matricula === mat && x.empresaId === $('#m-emp').value; })) return formError('Já existe um empregado com essa matrícula nesta empresa.');
-  var rec = Object.assign({}, id ? DB.empregados[id] : {}, {nome:nome, matricula:mat, cpf:$('#m-cpf').value.trim(), empresaId:$('#m-emp').value, cargoId:$('#m-car').value, setor:$('#m-set').value.trim(), admissao:$('#m-adm').value,
+  var cpf = $('#m-cpf').value.replace(/\D/g, '');
+  if(cpf && vals(DB.empregados).some(function(x){ return x._id !== id && x.cpf && x.cpf.replace(/\D/g, '') === cpf; })) return formError('Já existe um empregado com esse CPF.');
+  var rec = Object.assign({}, id ? DB.empregados[id] : {}, {nome:nome, cpf:$('#m-cpf').value.trim(), empresaId:$('#m-emp').value, cliente:$('#m-cli').value.trim(), cargoId:$('#m-car').value, admissao:$('#m-adm').value,
     tamanhos:{camisa:$('#m-t-camisa').value.trim().toUpperCase(), calca:$('#m-t-calca').value.trim().toUpperCase(), calcado:$('#m-t-calcado').value.trim().toUpperCase(), luva:$('#m-t-luva').value.trim().toUpperCase()},
     ativo:$('#m-ativo').value === '1', atualizadoEm:nowTs()});
   delete rec._id;
@@ -499,8 +500,8 @@ function fichaEmpregado(id){
   var t = e.tamanhos || {}, posse = itensEmPosse(id);
   var hist = vals(DB.entregas).filter(function(en){ return en.empregadoId === id && !en.cancelada; }).sort(function(a, b){ return b.ts - a.ts; });
   openModal('<div class="modal-title">'+esc(e.nome)+(e.ativo === false ? ' <span class="pill gray">Desligado</span>' : '')+'</div><div class="info-grid">' +
-    '<div><div class="lbl">Matrícula</div>'+esc(e.matricula || '—')+'</div><div><div class="lbl">Empresa</div>'+esc(nomeEmpresa(e.empresaId))+'</div><div><div class="lbl">Cargo</div>'+esc(nomeCargo(e.cargoId))+'</div><div><div class="lbl">Setor</div>'+esc(e.setor || '—')+'</div>' +
-    '<div><div class="lbl">Admissão</div>'+fmtD(e.admissao)+'</div><div><div class="lbl">CPF</div>'+esc(e.cpf || '—')+'</div><div style="grid-column:span 2"><div class="lbl">Tamanhos</div>Camisa '+esc(t.camisa || '—')+' · Calça '+esc(t.calca || '—')+' · Calçado '+esc(t.calcado || '—')+' · Luva '+esc(t.luva || '—')+'</div></div>' +
+    '<div><div class="lbl">Empresa</div>'+esc(nomeEmpresa(e.empresaId))+'</div><div><div class="lbl">Cliente</div>'+esc(e.cliente || '—')+'</div><div><div class="lbl">Cargo</div>'+esc(nomeCargo(e.cargoId))+'</div><div><div class="lbl">Admissão</div>'+fmtD(e.admissao)+'</div>' +
+    '<div><div class="lbl">CPF</div>'+esc(e.cpf || '—')+'</div><div style="grid-column:span 3"><div class="lbl">Tamanhos</div>Camisa '+esc(t.camisa || '—')+' · Calça '+esc(t.calca || '—')+' · Calçado '+esc(t.calcado || '—')+' · Luva '+esc(t.luva || '—')+'</div></div>' +
     '<div class="section-label">Itens em posse</div>' + (posse.length ? '<table class="items-table"><thead><tr><th>Item</th><th>Tam.</th><th class="num">Qtd</th><th>CA</th><th>Entregue</th><th>Troca prevista</th><th></th></tr></thead><tbody>' + posse.map(function(x){
       var d = daysUntil(x.item.proximaTroca);
       return '<tr><td>'+esc(nomeProd(x.item.pid))+'</td><td class="mono">'+esc(tamLabel(x.item.tk))+'</td><td class="num">'+x.aberto+'</td><td class="mono">'+esc(x.item.ca || '—')+'</td><td class="mono">'+fmtD(x.data)+'</td>' +
@@ -605,8 +606,9 @@ function toIso(v){
 }
 function previewImport(rows){
   importRows = rows.map(function(r){
-    return {nome:String(pick(r, ['nome','nome completo','empregado','funcionario','colaborador'])).trim(), matricula:String(pick(r, ['matricula','matrícula','registro','re','chapa'])).trim(),
-      cpf:String(pick(r, ['cpf'])).trim(), empresa:String(pick(r, ['empresa','unidade','cliente','razao social','lotacao'])).trim(), setor:String(pick(r, ['setor','departamento'])).trim(),
+    return {nome:String(pick(r, ['nome','nome completo','empregado','funcionario','colaborador'])).trim(),
+      cpf:String(pick(r, ['cpf'])).trim(), empresa:String(pick(r, ['empresa','empregador','razao social'])).trim(),
+      cliente:String(pick(r, ['cliente','posto','posto de trabalho','tomador','local de trabalho','contrato','unidade','lotacao'])).trim(),
       cargo:String(pick(r, ['cargo','funcao','função'])).trim(), admissao:toIso(pick(r, ['admissao','admissão','data admissao','data de admissao'])),
       camisa:String(pick(r, ['camisa','tamanho camisa'])).trim(), calca:String(pick(r, ['calca','calça','tamanho calca'])).trim(), calcado:String(pick(r, ['calcado','calçado','sapato','bota'])).trim(), luva:String(pick(r, ['luva'])).trim()};
   }).filter(function(r){ return r.nome; });
@@ -614,12 +616,12 @@ function previewImport(rows){
   var novos = 0, atual = 0;
   importRows.forEach(function(r){ if(findExistente(r)) atual++; else novos++; });
   openModal('<div class="modal-title">Importar empregados</div><div class="modal-sub">'+importRows.length+' linhas lidas · '+novos+' novos · '+atual+' já cadastrados (serão atualizados). Empresas e cargos que não existirem serão criados.</div>' +
-    '<div class="table-wrap" style="max-height:340px;overflow:auto"><table class="items-table"><thead><tr><th>Nome</th><th>Matrícula</th><th>Empresa</th><th>Cargo</th><th>Setor</th><th>Admissão</th></tr></thead><tbody>' +
-    importRows.slice(0, 200).map(function(r){ return '<tr><td>'+esc(r.nome)+(findExistente(r) ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">atualizar</span>' : '')+'</td><td class="mono">'+esc(r.matricula)+'</td><td>'+esc(r.empresa)+'</td><td>'+esc(r.cargo)+'</td><td>'+esc(r.setor)+'</td><td class="mono">'+fmtD(r.admissao)+'</td></tr>'; }).join('') +
-    '</tbody></table></div><div class="modal-sub" style="margin-top:10px">Colunas reconhecidas: Nome, Matrícula, CPF, Empresa, Setor, Cargo, Admissão, Camisa, Calça, Calçado, Luva.</div>' + modalActions('Importar ' + importRows.length, 'confirmar-import'), 'wide');
+    '<div class="table-wrap" style="max-height:340px;overflow:auto"><table class="items-table"><thead><tr><th>Nome</th><th>Empresa</th><th>Cliente</th><th>Cargo</th><th>Admissão</th></tr></thead><tbody>' +
+    importRows.slice(0, 200).map(function(r){ return '<tr><td>'+esc(r.nome)+(findExistente(r) ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">atualizar</span>' : '')+'</td><td>'+esc(r.empresa)+'</td><td>'+esc(r.cliente || '—')+'</td><td>'+esc(r.cargo)+'</td><td class="mono">'+fmtD(r.admissao)+'</td></tr>'; }).join('') +
+    '</tbody></table></div><div class="modal-sub" style="margin-top:10px">Colunas reconhecidas: Nome, CPF, Empresa, Cliente (ou Posto), Cargo, Admissão, Camisa, Calça, Calçado, Luva.</div>' + modalActions('Importar ' + importRows.length, 'confirmar-import'), 'wide');
 }
 function findExistente(r){
-  return vals(DB.empregados).find(function(e){ return (r.matricula && e.matricula === r.matricula) || (r.cpf && e.cpf && e.cpf.replace(/\D/g, '') === r.cpf.replace(/\D/g, '')) || norm(e.nome) === norm(r.nome); });
+  return vals(DB.empregados).find(function(e){ return (r.cpf && e.cpf && e.cpf.replace(/\D/g, '') === r.cpf.replace(/\D/g, '')) || norm(e.nome) === norm(r.nome); });
 }
 formHandlers['confirmar-import'] = function(btn){
   var p = {}, empMap = {}, carMap = {};
@@ -629,7 +631,7 @@ formHandlers['confirmar-import'] = function(btn){
     var ex = findExistente(r), id = ex ? ex._id : store.key(), base = ex ? Object.assign({}, DB.empregados[id]) : {ativo:true};
     delete base._id;
     var t = base.tamanhos || {};
-    p['empregados/' + id] = Object.assign(base, {nome:r.nome, matricula:r.matricula || base.matricula || '', cpf:r.cpf || base.cpf || '', setor:r.setor || base.setor || '', admissao:r.admissao || base.admissao || '',
+    p['empregados/' + id] = Object.assign(base, {nome:r.nome, cpf:r.cpf || base.cpf || '', cliente:r.cliente || base.cliente || '', admissao:r.admissao || base.admissao || '',
       empresaId: idPara(empMap, 'empresas', r.empresa) || base.empresaId || '', cargoId: idPara(carMap, 'cargos', r.cargo, {kit:[]}) || base.cargoId || '',
       tamanhos:{camisa:(r.camisa || t.camisa || '').toUpperCase(), calca:(r.calca || t.calca || '').toUpperCase(), calcado:(r.calcado || t.calcado || '').toUpperCase(), luva:(r.luva || t.luva || '').toUpperCase()}, atualizadoEm:nowTs()});
   });

@@ -414,7 +414,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-10-20-1446</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-10-22-0837</div>
     </div>
   </aside>
 
@@ -503,8 +503,9 @@
     <section class="view" id="view-empregados">
       <div class="topbar"><div class="page-title">Empregados</div><div class="page-date page-date-js"></div></div>
       <div class="toolbar">
-        <input class="tb-input search" id="emp-busca" placeholder="Buscar nome, matrícula, CPF...">
+        <input class="tb-input search" id="emp-busca" placeholder="Buscar nome, cliente, CPF...">
         <select class="tb-select sel-empresas" id="emp-empresa" data-all="Todas as empresas"></select>
+        <select class="tb-select" id="emp-cliente"><option value="">Todos os clientes</option></select>
         <select class="tb-select" id="emp-status"><option value="ativos">Ativos</option><option value="inativos">Desligados</option><option value="">Todos</option></select>
         <span class="spacer"></span>
         <button class="btn" data-act="export-empregados">Exportar Excel</button>
@@ -583,6 +584,7 @@
 <div class="toast" id="toast"></div>
 <datalist id="dl-produtos"></datalist>
 <datalist id="dl-empregados"></datalist>
+<datalist id="dl-clientes"></datalist>
 <input type="file" id="file-import" accept=".xlsx,.xls,.csv" style="display:none">
 <div id="print-area"></div>
 
@@ -973,7 +975,7 @@ function initUI(){
   });
   // filtros: re-renderiza a tabela ao digitar/alterar
   ['est-busca','est-cat','est-local','est-zerados','est-minimo','mov-busca','mov-tipo','mov-de','mov-ate','prod-busca','prod-cat','prod-status',
-   'ent-busca','ent-empresa','ent-de','ent-ate','emp-busca','emp-empresa','emp-status','rel-de','rel-ate','rel-empresa','rel-cat','cmp-busca','cmp-unidade'].forEach(function(id){
+   'ent-busca','ent-empresa','ent-de','ent-ate','emp-busca','emp-empresa','emp-cliente','emp-status','rel-de','rel-ate','rel-empresa','rel-cat','cmp-busca','cmp-unidade'].forEach(function(id){
     var el = $('#' + id); if(!el) return;
     el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' || el.type === 'date' ? 'change' : 'input', function(){ renderView(curView); });
   });
@@ -1012,10 +1014,14 @@ function fillSelects(){
     s.value = v;
   });
   $('#dl-produtos').innerHTML = vals(DB.produtos).filter(function(p){ return p.ativo !== false; }).sort(byName).map(function(p){ return '<option value="'+esc(prodLabel(p))+'"></option>'; }).join('');
+  var clientes = {}; vals(DB.empregados).forEach(function(e){ if(e.cliente) clientes[e.cliente.trim().toUpperCase()] = e.cliente.trim(); });
+  var cl = Object.keys(clientes).sort().map(function(k){ return clientes[k]; });
+  $('#dl-clientes').innerHTML = cl.map(function(c){ return '<option value="'+esc(c)+'">'; }).join('');
+  var sc = $('#emp-cliente'); if(sc){ var v = sc.value; sc.innerHTML = '<option value="">Todos os clientes</option>' + cl.map(function(c){ return '<option value="'+esc(c)+'">'+esc(c)+'</option>'; }).join(''); sc.value = v; }
   $('#dl-empregados').innerHTML = vals(DB.empregados).filter(function(e){ return e.ativo !== false; }).sort(byName).map(function(e){ return '<option value="'+esc(empLabel(e))+'"></option>'; }).join('');
 }
 function prodLabel(p){ return p.nome + (p.ca ? ' · CA ' + p.ca : ''); }
-function empLabel(e){ return e.nome + (e.matricula ? ' · ' + e.matricula : ''); }
+function empLabel(e){ return e.nome + (e.cliente ? ' · ' + e.cliente : ''); }
 function findProdByLabel(l){ l = norm(l); if(!l) return null; var p = vals(DB.produtos).find(function(p){ return norm(prodLabel(p)) === l; }) || vals(DB.produtos).find(function(p){ return norm(p.nome) === l; }); return p ? p._id : null; }
 function findEmpByLabel(l){ l = norm(l); if(!l) return null; var e = vals(DB.empregados).find(function(e){ return norm(empLabel(e)) === l; }) || vals(DB.empregados).find(function(e){ return norm(e.nome) === l; }); return e ? e._id : null; }
 function nomeEmpresa(id){ return (DB.empresas[id] || {}).nome || '—'; }
@@ -1231,7 +1237,7 @@ function filtroEntregas(){
     if(de && en.data < de) return false; if(ate && en.data > ate) return false;
     var e = DB.empregados[en.empregadoId] || {};
     if(emp && e.empresaId !== emp) return false;
-    if(q && norm(e.nome + ' ' + (e.matricula || '') + ' ' + (en.itens || []).map(function(i){ return nomeProd(i.pid); }).join(' ')).indexOf(q) === -1) return false;
+    if(q && norm(e.nome + ' ' + (e.cliente || '') + ' ' + (en.itens || []).map(function(i){ return nomeProd(i.pid); }).join(' ')).indexOf(q) === -1) return false;
     return true;
   }).sort(function(a, b){ return b.ts - a.ts; });
 }
@@ -1242,7 +1248,7 @@ function renderEntregas(){
     list.map(function(en){
       var e = DB.empregados[en.empregadoId] || {};
       var itens = (en.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk && i.tk !== 'UN' ? ' (' + i.tk + ')' : '')); }).join('<br>');
-      return '<tr><td class="mono">'+fmtD(en.data)+'</td><td><a href="#" data-act="ficha-empregado" data-id="'+en.empregadoId+'" style="color:var(--text)">'+esc(e.nome || '—')+'</a><span class="sub">'+esc(nomeEmpresa(e.empresaId))+'</span></td>' +
+      return '<tr><td class="mono">'+fmtD(en.data)+'</td><td><a href="#" data-act="ficha-empregado" data-id="'+en.empregadoId+'" style="color:var(--text)">'+esc(e.nome || '—')+'</a><span class="sub">'+esc(nomeEmpresa(e.empresaId))+(e.cliente ? ' · ' + esc(e.cliente) : '')+'</span></td>' +
         '<td style="font-size:12px">'+itens+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'</td><td>'+(en.assinatura ? '<span class="pill teal">Assinado</span>' : '<span class="pill amber">Pendente</span>')+'</td>' +
         '<td class="mono">'+esc(en.usuario || '')+'</td><td style="white-space:nowrap"><button class="btn btn-sm" data-act="print-termo" data-id="'+en._id+'">Termo</button></td></tr>';
     }).join('') + '</tbody></table><div class="tbl-foot">'+list.length+' entregas</div>';
@@ -1253,23 +1259,25 @@ function renderEntregas(){
 // =====================================================================
 function renderEmpregados(){
   var q = norm($('#emp-busca').value), emp = $('#emp-empresa').value, st = $('#emp-status').value;
+  var cli = ($('#emp-cliente') || {}).value || '';
   var posse = {}; itensEmPosse(null).forEach(function(x){ (posse[x.empregadoId] = posse[x.empregadoId] || []).push(x); });
   var rows = vals(DB.empregados).filter(function(e){
     if(st === 'ativos' && e.ativo === false) return false;
     if(st === 'inativos' && e.ativo !== false) return false;
     if(emp && e.empresaId !== emp) return false;
-    if(q && norm([e.nome, e.matricula, e.cpf, e.setor].join(' ')).indexOf(q) === -1) return false;
+    if(cli && norm(e.cliente) !== norm(cli)) return false;
+    if(q && norm([e.nome, e.cliente, e.cpf].join(' ')).indexOf(q) === -1) return false;
     return true;
   }).sort(byName);
   if(!rows.length){ $('#emp-table').innerHTML = emptyState(vals(DB.empregados).length ? 'Nenhum empregado com esses filtros.' : 'Nenhum empregado cadastrado. Cadastre manualmente ou importe uma planilha do RH.'); return; }
-  $('#emp-table').innerHTML = '<table><thead><tr><th>Nome</th><th>Matrícula</th><th>Empresa / setor</th><th>Cargo</th><th class="num">Itens em posse</th><th>Próxima troca</th><th></th></tr></thead><tbody>' +
+  $('#emp-table').innerHTML = '<table><thead><tr><th>Nome</th><th>Empresa</th><th>Cliente</th><th>Cargo</th><th class="num">Itens em posse</th><th>Próxima troca</th><th></th></tr></thead><tbody>' +
     rows.map(function(e){
       var p = posse[e._id] || [];
       var prox = p.filter(function(x){ return x.item.proximaTroca; }).sort(function(a, b){ return a.item.proximaTroca < b.item.proximaTroca ? -1 : 1; })[0];
       var proxHtml = '—';
       if(prox){ var d = daysUntil(prox.item.proximaTroca); proxHtml = fmtD(prox.item.proximaTroca) + ' <span class="pill '+(d < 0 ? 'red' : d <= +cfg('diasAlertaTroca', 15) ? 'amber' : 'gray')+'" style="padding:1px 7px;font-size:10.5px">'+(d < 0 ? 'vencida' : d + 'd')+'</span><span class="sub">'+esc(nomeProd(prox.item.pid))+'</span>'; }
-      return '<tr class="row-clickable" data-act="ficha-empregado" data-id="'+e._id+'"><td>'+esc(e.nome)+(e.ativo === false ? ' <span class="pill gray">Desligado</span>' : '')+'</td><td class="mono">'+esc(e.matricula || '—')+'</td>' +
-        '<td>'+esc(nomeEmpresa(e.empresaId))+(e.setor ? '<span class="sub">'+esc(e.setor)+'</span>' : '')+'</td><td>'+esc(nomeCargo(e.cargoId))+'</td><td class="num">'+p.reduce(function(s, x){ return s + x.aberto; }, 0)+'</td><td>'+proxHtml+'</td>' +
+      return '<tr class="row-clickable" data-act="ficha-empregado" data-id="'+e._id+'"><td>'+esc(e.nome)+(e.ativo === false ? ' <span class="pill gray">Desligado</span>' : '')+'</td>' +
+        '<td>'+esc(nomeEmpresa(e.empresaId))+'</td><td>'+esc(e.cliente || '—')+'</td><td>'+esc(nomeCargo(e.cargoId))+'</td><td class="num">'+p.reduce(function(s, x){ return s + x.aberto; }, 0)+'</td><td>'+proxHtml+'</td>' +
         '<td><button class="btn btn-sm need-entregar" data-act="nova-entrega" data-id="'+e._id+'"'+(can('entregar') && e.ativo !== false ? '' : ' disabled')+'>Entregar</button></td></tr>';
     }).join('') + '</tbody></table><div class="tbl-foot">'+rows.length+' empregados</div>';
 }
@@ -1289,7 +1297,7 @@ function renderValidade(){
   if(t === 'trocas'){
     h = trocas.length ? '<table><thead><tr><th>Empregado</th><th>Item</th><th>Tam.</th><th>Entregue em</th><th>Troca prevista</th><th>Situação</th><th></th></tr></thead><tbody>' + trocas.map(function(x){
       var e = DB.empregados[x.empregadoId] || {}, d = daysUntil(x.item.proximaTroca);
-      return '<tr><td>'+esc(e.nome)+'<span class="sub">'+esc(nomeEmpresa(e.empresaId))+'</span></td><td>'+esc(nomeProd(x.item.pid))+'</td><td class="mono">'+esc(tamLabel(x.item.tk))+'</td><td class="mono">'+fmtD(x.data)+'</td><td class="mono">'+fmtD(x.item.proximaTroca)+'</td>' +
+      return '<tr><td>'+esc(e.nome)+'<span class="sub">'+esc(nomeEmpresa(e.empresaId))+(e.cliente ? ' · ' + esc(e.cliente) : '')+'</span></td><td>'+esc(nomeProd(x.item.pid))+'</td><td class="mono">'+esc(tamLabel(x.item.tk))+'</td><td class="mono">'+fmtD(x.data)+'</td><td class="mono">'+fmtD(x.item.proximaTroca)+'</td>' +
         '<td><span class="pill '+(d < 0 ? 'red' : 'amber')+'">'+(d < 0 ? 'Vencida há ' + (-d) + 'd' : (d === 0 ? 'Hoje' : 'Em ' + d + 'd'))+'</span></td>' +
         '<td><button class="btn btn-sm" data-act="nova-entrega" data-id="'+x.empregadoId+'"'+(can('entregar') ? '' : ' disabled')+'>Trocar</button></td></tr>';
     }).join('') + '</tbody></table>' : emptyState('Nenhuma troca vencida ou próxima.');
@@ -1456,7 +1464,7 @@ function handleAction(a, el){
     case 'export-movs': exportXlsx('movimentacoes', filtroMovs().map(function(m){ var e = DB.empregados[m.empregadoId] || {}; var p = DB.produtos[m.pid] || {}; return {Data:fmtD(m.data), Tipo:(MOV_TIPOS[m.tipo] || {}).label || m.tipo, Produto:p.nome, CA:p.ca || '', Tamanho:tamLabel(m.tk), Quantidade:m.qtd * (((MOV_TIPOS[m.tipo] || {}).sinal) === -1 ? -1 : 1), 'Afeta saldo':((MOV_TIPOS[m.tipo] || {}).sinal) === 0 ? 'Não' : 'Sim', Local:nomeLocal(m.loc), Empregado:e.nome || '', Fornecedor:m.fornecedor || '', NF:m.doc || '', Motivo:m.motivo || '', 'Custo unit.':m.custoUnit || '', Usuario:m.usuario}; })); break;
     case 'export-produtos': exportXlsx('produtos', vals(DB.produtos).sort(byName).map(function(p){ return {Produto:p.nome, Categoria:p.categoria, CA:p.ca || '', 'Validade CA':fmtD(p.validadeCA), Fabricante:p.fabricante || '', 'Vida util (dias)':p.vidaUtilDias || '', Tamanhos:(p.tamanhos || []).join(', '), 'Estoque minimo':p.estoqueMinimo || 0, Custo:p.custo || 0, Saldo:saldoProduto(p._id), Ativo:p.ativo === false ? 'Não' : 'Sim'}; })); break;
     case 'export-entregas': exportEntregas(); break;
-    case 'export-empregados': exportXlsx('empregados', vals(DB.empregados).sort(byName).map(function(e){ var t = e.tamanhos || {}; return {Nome:e.nome, Matricula:e.matricula || '', CPF:e.cpf || '', Empresa:nomeEmpresa(e.empresaId), Setor:e.setor || '', Cargo:nomeCargo(e.cargoId), Admissao:fmtD(e.admissao), Camisa:t.camisa || '', Calca:t.calca || '', Calcado:t.calcado || '', Luva:t.luva || '', Situacao:e.ativo === false ? 'Desligado' : 'Ativo', 'Itens em posse':itensEmPosse(e._id).reduce(function(s, x){ return s + x.aberto; }, 0)}; })); break;
+    case 'export-empregados': exportXlsx('empregados', vals(DB.empregados).sort(byName).map(function(e){ var t = e.tamanhos || {}; return {Nome:e.nome, CPF:e.cpf || '', Empresa:nomeEmpresa(e.empresaId), Cliente:e.cliente || '', Cargo:nomeCargo(e.cargoId), Admissao:fmtD(e.admissao), Camisa:t.camisa || '', Calca:t.calca || '', Calcado:t.calcado || '', Luva:t.luva || '', Situacao:e.ativo === false ? 'Desligado' : 'Ativo', 'Itens em posse':itensEmPosse(e._id).reduce(function(s, x){ return s + x.aberto; }, 0)}; })); break;
     case 'rel-export': if(relData && relData.rows) exportXlsx(relData.nome, relData.rows); else toast('Nada para exportar nesta aba.', 'err'); break;
     case 'rel-print': printRelatorio(); break;
     default:
@@ -1879,10 +1887,11 @@ function formEmpregado(id){
   var emp = vals(DB.empresas).sort(byName).map(function(x){ return [x._id, x.nome]; }), car = vals(DB.cargos).sort(byName).map(function(x){ return [x._id, x.nome]; });
   openModal('<div class="modal-title">'+(id ? 'Editar empregado' : 'Novo empregado')+'</div><div class="modal-grid">' +
     field('Nome completo', '<input id="m-nome" value="'+esc(e.nome || '')+'">', 'full') +
-    field('Matrícula', '<input id="m-mat" value="'+esc(e.matricula || '')+'">') + field('CPF', '<input id="m-cpf" value="'+esc(e.cpf || '')+'" placeholder="Opcional">') +
-    field('Empresa / unidade', '<select id="m-emp">'+optList(emp, e.empresaId, 'Selecione...')+'</select>', '', emp.length ? '' : 'Cadastre em Cadastros > Empresas') +
+    field('Empresa', '<select id="m-emp">'+optList(emp, e.empresaId, 'Selecione...')+'</select>', '', emp.length ? '' : 'Cadastre em Cadastros > Centros / unidades') +
+    field('Cliente', '<input id="m-cli" list="dl-clientes" value="'+esc(e.cliente || '')+'" placeholder="Onde trabalha (posto / tomador)">') +
     field('Cargo', '<select id="m-car">'+optList(car, e.cargoId, 'Selecione...')+'</select>', '', car.length ? '' : 'Cadastre em Cadastros > Cargos') +
-    field('Setor', '<input id="m-set" value="'+esc(e.setor || '')+'">') + field('Admissão', '<input type="date" id="m-adm" value="'+esc(e.admissao || '')+'">') +
+    field('Admissão', '<input type="date" id="m-adm" value="'+esc(e.admissao || '')+'">') +
+    field('CPF', '<input id="m-cpf" value="'+esc(e.cpf || '')+'" placeholder="Opcional">') +
     '</div><div class="section-label">Tamanhos</div><div class="modal-grid" style="grid-template-columns:repeat(4,1fr)">' +
     field('Camisa / jaleco', '<input id="m-t-camisa" value="'+esc(t.camisa || '')+'" placeholder="P, M, G...">') + field('Calça', '<input id="m-t-calca" value="'+esc(t.calca || '')+'">') +
     field('Calçado', '<input id="m-t-calcado" value="'+esc(t.calcado || '')+'" placeholder="38, 40...">') + field('Luva', '<input id="m-t-luva" value="'+esc(t.luva || '')+'">') +
@@ -1891,9 +1900,9 @@ function formEmpregado(id){
 }
 formHandlers['salvar-empregado'] = function(btn){
   var id = ($('#m-id') || {}).value, nome = $('#m-nome').value.trim(); if(!nome) return formError('Informe o nome.');
-  var mat = $('#m-mat').value.trim();
-  if(mat && vals(DB.empregados).some(function(x){ return x._id !== id && x.matricula === mat && x.empresaId === $('#m-emp').value; })) return formError('Já existe um empregado com essa matrícula nesta empresa.');
-  var rec = Object.assign({}, id ? DB.empregados[id] : {}, {nome:nome, matricula:mat, cpf:$('#m-cpf').value.trim(), empresaId:$('#m-emp').value, cargoId:$('#m-car').value, setor:$('#m-set').value.trim(), admissao:$('#m-adm').value,
+  var cpf = $('#m-cpf').value.replace(/\D/g, '');
+  if(cpf && vals(DB.empregados).some(function(x){ return x._id !== id && x.cpf && x.cpf.replace(/\D/g, '') === cpf; })) return formError('Já existe um empregado com esse CPF.');
+  var rec = Object.assign({}, id ? DB.empregados[id] : {}, {nome:nome, cpf:$('#m-cpf').value.trim(), empresaId:$('#m-emp').value, cliente:$('#m-cli').value.trim(), cargoId:$('#m-car').value, admissao:$('#m-adm').value,
     tamanhos:{camisa:$('#m-t-camisa').value.trim().toUpperCase(), calca:$('#m-t-calca').value.trim().toUpperCase(), calcado:$('#m-t-calcado').value.trim().toUpperCase(), luva:$('#m-t-luva').value.trim().toUpperCase()},
     ativo:$('#m-ativo').value === '1', atualizadoEm:nowTs()});
   delete rec._id;
@@ -1906,8 +1915,8 @@ function fichaEmpregado(id){
   var t = e.tamanhos || {}, posse = itensEmPosse(id);
   var hist = vals(DB.entregas).filter(function(en){ return en.empregadoId === id && !en.cancelada; }).sort(function(a, b){ return b.ts - a.ts; });
   openModal('<div class="modal-title">'+esc(e.nome)+(e.ativo === false ? ' <span class="pill gray">Desligado</span>' : '')+'</div><div class="info-grid">' +
-    '<div><div class="lbl">Matrícula</div>'+esc(e.matricula || '—')+'</div><div><div class="lbl">Empresa</div>'+esc(nomeEmpresa(e.empresaId))+'</div><div><div class="lbl">Cargo</div>'+esc(nomeCargo(e.cargoId))+'</div><div><div class="lbl">Setor</div>'+esc(e.setor || '—')+'</div>' +
-    '<div><div class="lbl">Admissão</div>'+fmtD(e.admissao)+'</div><div><div class="lbl">CPF</div>'+esc(e.cpf || '—')+'</div><div style="grid-column:span 2"><div class="lbl">Tamanhos</div>Camisa '+esc(t.camisa || '—')+' · Calça '+esc(t.calca || '—')+' · Calçado '+esc(t.calcado || '—')+' · Luva '+esc(t.luva || '—')+'</div></div>' +
+    '<div><div class="lbl">Empresa</div>'+esc(nomeEmpresa(e.empresaId))+'</div><div><div class="lbl">Cliente</div>'+esc(e.cliente || '—')+'</div><div><div class="lbl">Cargo</div>'+esc(nomeCargo(e.cargoId))+'</div><div><div class="lbl">Admissão</div>'+fmtD(e.admissao)+'</div>' +
+    '<div><div class="lbl">CPF</div>'+esc(e.cpf || '—')+'</div><div style="grid-column:span 3"><div class="lbl">Tamanhos</div>Camisa '+esc(t.camisa || '—')+' · Calça '+esc(t.calca || '—')+' · Calçado '+esc(t.calcado || '—')+' · Luva '+esc(t.luva || '—')+'</div></div>' +
     '<div class="section-label">Itens em posse</div>' + (posse.length ? '<table class="items-table"><thead><tr><th>Item</th><th>Tam.</th><th class="num">Qtd</th><th>CA</th><th>Entregue</th><th>Troca prevista</th><th></th></tr></thead><tbody>' + posse.map(function(x){
       var d = daysUntil(x.item.proximaTroca);
       return '<tr><td>'+esc(nomeProd(x.item.pid))+'</td><td class="mono">'+esc(tamLabel(x.item.tk))+'</td><td class="num">'+x.aberto+'</td><td class="mono">'+esc(x.item.ca || '—')+'</td><td class="mono">'+fmtD(x.data)+'</td>' +
@@ -2012,8 +2021,9 @@ function toIso(v){
 }
 function previewImport(rows){
   importRows = rows.map(function(r){
-    return {nome:String(pick(r, ['nome','nome completo','empregado','funcionario','colaborador'])).trim(), matricula:String(pick(r, ['matricula','matrícula','registro','re','chapa'])).trim(),
-      cpf:String(pick(r, ['cpf'])).trim(), empresa:String(pick(r, ['empresa','unidade','cliente','razao social','lotacao'])).trim(), setor:String(pick(r, ['setor','departamento'])).trim(),
+    return {nome:String(pick(r, ['nome','nome completo','empregado','funcionario','colaborador'])).trim(),
+      cpf:String(pick(r, ['cpf'])).trim(), empresa:String(pick(r, ['empresa','empregador','razao social'])).trim(),
+      cliente:String(pick(r, ['cliente','posto','posto de trabalho','tomador','local de trabalho','contrato','unidade','lotacao'])).trim(),
       cargo:String(pick(r, ['cargo','funcao','função'])).trim(), admissao:toIso(pick(r, ['admissao','admissão','data admissao','data de admissao'])),
       camisa:String(pick(r, ['camisa','tamanho camisa'])).trim(), calca:String(pick(r, ['calca','calça','tamanho calca'])).trim(), calcado:String(pick(r, ['calcado','calçado','sapato','bota'])).trim(), luva:String(pick(r, ['luva'])).trim()};
   }).filter(function(r){ return r.nome; });
@@ -2021,12 +2031,12 @@ function previewImport(rows){
   var novos = 0, atual = 0;
   importRows.forEach(function(r){ if(findExistente(r)) atual++; else novos++; });
   openModal('<div class="modal-title">Importar empregados</div><div class="modal-sub">'+importRows.length+' linhas lidas · '+novos+' novos · '+atual+' já cadastrados (serão atualizados). Empresas e cargos que não existirem serão criados.</div>' +
-    '<div class="table-wrap" style="max-height:340px;overflow:auto"><table class="items-table"><thead><tr><th>Nome</th><th>Matrícula</th><th>Empresa</th><th>Cargo</th><th>Setor</th><th>Admissão</th></tr></thead><tbody>' +
-    importRows.slice(0, 200).map(function(r){ return '<tr><td>'+esc(r.nome)+(findExistente(r) ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">atualizar</span>' : '')+'</td><td class="mono">'+esc(r.matricula)+'</td><td>'+esc(r.empresa)+'</td><td>'+esc(r.cargo)+'</td><td>'+esc(r.setor)+'</td><td class="mono">'+fmtD(r.admissao)+'</td></tr>'; }).join('') +
-    '</tbody></table></div><div class="modal-sub" style="margin-top:10px">Colunas reconhecidas: Nome, Matrícula, CPF, Empresa, Setor, Cargo, Admissão, Camisa, Calça, Calçado, Luva.</div>' + modalActions('Importar ' + importRows.length, 'confirmar-import'), 'wide');
+    '<div class="table-wrap" style="max-height:340px;overflow:auto"><table class="items-table"><thead><tr><th>Nome</th><th>Empresa</th><th>Cliente</th><th>Cargo</th><th>Admissão</th></tr></thead><tbody>' +
+    importRows.slice(0, 200).map(function(r){ return '<tr><td>'+esc(r.nome)+(findExistente(r) ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">atualizar</span>' : '')+'</td><td>'+esc(r.empresa)+'</td><td>'+esc(r.cliente || '—')+'</td><td>'+esc(r.cargo)+'</td><td class="mono">'+fmtD(r.admissao)+'</td></tr>'; }).join('') +
+    '</tbody></table></div><div class="modal-sub" style="margin-top:10px">Colunas reconhecidas: Nome, CPF, Empresa, Cliente (ou Posto), Cargo, Admissão, Camisa, Calça, Calçado, Luva.</div>' + modalActions('Importar ' + importRows.length, 'confirmar-import'), 'wide');
 }
 function findExistente(r){
-  return vals(DB.empregados).find(function(e){ return (r.matricula && e.matricula === r.matricula) || (r.cpf && e.cpf && e.cpf.replace(/\D/g, '') === r.cpf.replace(/\D/g, '')) || norm(e.nome) === norm(r.nome); });
+  return vals(DB.empregados).find(function(e){ return (r.cpf && e.cpf && e.cpf.replace(/\D/g, '') === r.cpf.replace(/\D/g, '')) || norm(e.nome) === norm(r.nome); });
 }
 formHandlers['confirmar-import'] = function(btn){
   var p = {}, empMap = {}, carMap = {};
@@ -2036,7 +2046,7 @@ formHandlers['confirmar-import'] = function(btn){
     var ex = findExistente(r), id = ex ? ex._id : store.key(), base = ex ? Object.assign({}, DB.empregados[id]) : {ativo:true};
     delete base._id;
     var t = base.tamanhos || {};
-    p['empregados/' + id] = Object.assign(base, {nome:r.nome, matricula:r.matricula || base.matricula || '', cpf:r.cpf || base.cpf || '', setor:r.setor || base.setor || '', admissao:r.admissao || base.admissao || '',
+    p['empregados/' + id] = Object.assign(base, {nome:r.nome, cpf:r.cpf || base.cpf || '', cliente:r.cliente || base.cliente || '', admissao:r.admissao || base.admissao || '',
       empresaId: idPara(empMap, 'empresas', r.empresa) || base.empresaId || '', cargoId: idPara(carMap, 'cargos', r.cargo, {kit:[]}) || base.cargoId || '',
       tamanhos:{camisa:(r.camisa || t.camisa || '').toUpperCase(), calca:(r.calca || t.calca || '').toUpperCase(), calcado:(r.calcado || t.calcado || '').toUpperCase(), luva:(r.luva || t.luva || '').toUpperCase()}, atualizadoEm:nowTs()});
   });
@@ -2051,8 +2061,8 @@ function prHead(titulo){
   return '<div class="pr-head"><img src="'+LOGO_SRC+'" alt=""><div class="pr-title">'+esc(titulo)+'<div style="font-size:11px;font-weight:normal">'+esc(cfg('empresaTermo', 'Grupo Login Serv'))+'</div></div></div>';
 }
 function prEmpInfo(e){
-  return '<div class="pr-info"><div><b>Empregado</b>'+esc(e.nome)+'</div><div><b>Matrícula</b>'+esc(e.matricula || '—')+'</div><div><b>CPF</b>'+esc(e.cpf || '—')+'</div>' +
-    '<div><b>Empresa / unidade</b>'+esc(nomeEmpresa(e.empresaId))+'</div><div><b>Cargo</b>'+esc(nomeCargo(e.cargoId))+'</div><div><b>Setor</b>'+esc(e.setor || '—')+'</div></div>';
+  return '<div class="pr-info"><div><b>Empregado</b>'+esc(e.nome)+'</div><div><b>CPF</b>'+esc(e.cpf || '—')+'</div><div><b>Cargo</b>'+esc(nomeCargo(e.cargoId))+'</div>' +
+    '<div><b>Empresa</b>'+esc(nomeEmpresa(e.empresaId))+'</div><div><b>Cliente</b>'+esc(e.cliente || '—')+'</div><div><b>Admissão</b>'+fmtD(e.admissao)+'</div></div>';
 }
 var TEXTO_NR6 = 'Declaro ter recebido gratuitamente da empresa os Equipamentos de Proteção Individual (EPI) e/ou uniformes relacionados abaixo, em perfeito estado de conservação e funcionamento, ' +
   'e ter sido orientado(a) e treinado(a) sobre o uso adequado, a guarda e a conservação. Comprometo-me, conforme a NR-6 e o art. 158 da CLT, a: (a) usá-los apenas para a finalidade a que se destinam; ' +
@@ -2110,7 +2120,7 @@ function exportEntregas(){
   var rows = [];
   filtroEntregas().forEach(function(en){
     var e = DB.empregados[en.empregadoId] || {};
-    (en.itens || []).forEach(function(i){ rows.push({Data:fmtD(en.data), Empregado:e.nome, Matricula:e.matricula || '', Empresa:nomeEmpresa(e.empresaId), Cargo:nomeCargo(e.cargoId), Produto:nomeProd(i.pid), Tamanho:tamLabel(i.tk), Quantidade:i.qtd, CA:i.ca || '', 'Proxima troca':fmtD(i.proximaTroca), Devolvido:i.devolvido || 0, Motivo:en.motivo || '', Assinado:en.assinatura ? 'Sim' : 'Não', Responsavel:en.usuario || ''}); });
+    (en.itens || []).forEach(function(i){ rows.push({Data:fmtD(en.data), Empregado:e.nome, Empresa:nomeEmpresa(e.empresaId), Cliente:e.cliente || '', Cargo:nomeCargo(e.cargoId), Produto:nomeProd(i.pid), Tamanho:tamLabel(i.tk), Quantidade:i.qtd, CA:i.ca || '', 'Proxima troca':fmtD(i.proximaTroca), Devolvido:i.devolvido || 0, Motivo:en.motivo || '', Assinado:en.assinatura ? 'Sim' : 'Não', Responsavel:en.usuario || ''}); });
   });
   exportXlsx('entregas-epi', rows);
 }
