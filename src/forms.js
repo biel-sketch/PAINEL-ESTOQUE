@@ -37,7 +37,7 @@ function handleAction(a, el){
     case 'editar-empregado': formEmpregado(id); break;
     case 'ficha-empregado': fichaEmpregado(id); break;
     case 'devolver': formDevolucao(el.dataset.ent, +el.dataset.idx); break;
-    case 'cad-novo': ({empresas:formEmpresa, cargos:formCargo, locais:formLocal})[tabs.cadastros](); break;
+    case 'cad-novo': ({clientes:formCliente, empresas:formEmpresa, cargos:formCargo, locais:formLocal})[tabs.cadastros](); break;
     case 'editar-empresa': formEmpresa(id); break;
     case 'editar-cargo': formCargo(id); break;
     case 'editar-local': formLocal(id); break;
@@ -517,8 +517,8 @@ function fichaEmpregado(id){
 function formEmpresa(id){
   if(!can('cadastros')) return;
   var e = id ? DB.empresas[id] : {};
-  openModal('<div class="modal-title">'+(id ? 'Editar empresa' : 'Nova empresa / unidade')+'</div><div class="modal-grid">' +
-    field('Nome', '<input id="c-nome" value="'+esc(e.nome || '')+'" placeholder="Ex.: Femsa Marília">', 'full') + field('CNPJ', '<input id="c-cnpj" value="'+esc(e.cnpj || '')+'">') + field('Cidade', '<input id="c-cid" value="'+esc(e.cidade || '')+'">') +
+  openModal('<div class="modal-title">'+(id ? 'Editar empresa' : 'Nova empresa')+'</div><div class="modal-grid">' +
+    field('Nome', '<input id="c-nome" value="'+esc(e.nome || '')+'" placeholder="Ex.: Login Serv">', 'full') + field('CNPJ', '<input id="c-cnpj" value="'+esc(e.cnpj || '')+'">') + field('Cidade', '<input id="c-cid" value="'+esc(e.cidade || '')+'">') +
     '</div>' + (id ? '<input type="hidden" id="c-id" value="'+id+'">' : '') + modalActions('Salvar', 'salvar-empresa'));
 }
 formHandlers['salvar-empresa'] = function(btn){

@@ -69,7 +69,7 @@ function cmpFiltrar(){
     if(cmpFiltro === 'encerradas' && e !== 'reprovada' && e !== 'cancelada') return false;
     if(['cotacao','aguardando','aprovada','pedido','recebida'].indexOf(cmpFiltro) !== -1 && e !== cmpFiltro) return false;
     if(un && c.unidadeId !== un) return false;
-    if(q){ var k = cmpCalc(c); if(norm([cmpNumero(c), c.item, c.solicitante, nomeEmpresa(c.unidadeId), k.escolhida ? k.escolhida.fornecedor : '', (c.cotacoes || []).map(function(x){ return x && x.fornecedor; }).join(' '), c.pedidoNumero].join(' ')).indexOf(q) === -1) return false; }
+    if(q){ var k = cmpCalc(c); if(norm([cmpNumero(c), c.item, c.solicitante, nomeCentro(c.unidadeId), k.escolhida ? k.escolhida.fornecedor : '', (c.cotacoes || []).map(function(x){ return x && x.fornecedor; }).join(' '), c.pedidoNumero].join(' ')).indexOf(q) === -1) return false; }
     return true;
   }).sort(function(a, b){ return (b.numero || 0) - (a.numero || 0); });
 }
@@ -107,7 +107,7 @@ function renderCompras(){
         '<td><span class="mono" style="color:var(--text)">'+cmpNumero(c)+'</span><span class="sub">'+fmtD(fmtISO(c.criadoEm))+' · '+esc(c.solicitante || '')+'</span></td>' +
         '<td class="wrap">'+esc(c.item)+(c.urgente ? ' <span class="pill red" style="padding:1px 7px;font-size:10.5px">Urgente</span>' : '')+'</td>' +
         '<td class="num">'+fmtN(c.qtd)+' <span style="color:var(--text-faint)">'+esc(c.unidade || '')+'</span></td>' +
-        '<td>'+esc(nomeEmpresa(c.unidadeId))+'</td>' +
+        '<td>'+esc(nomeCentro(c.unidadeId))+'</td>' +
         '<td class="mono '+necCls+'">'+fmtD(c.necessidade)+'</td>' +
         '<td>'+chips+'</td>' +
         '<td>'+(k.escolhida ? esc(k.escolhida.fornecedor) : '<span style="color:var(--text-faint)">—</span>')+'</td>' +
@@ -139,7 +139,6 @@ function formCompra(id, pidPrefill){
   var e = novo ? 'cotacao' : cmpEtapa(c);
   var edSol = novo || cmpPodeEditarSolic(c), edCot = !novo && (e === 'cotacao' || e === 'reprovada') && can('comprar');
   var dis = function(b){ return b ? '' : ' disabled'; };
-  var empresas = vals(DB.empresas).sort(byName).map(function(x){ return [x._id, x.nome]; });
 
   // Linha do tempo do processo
   var passos = ['Solicitação','Cotação','Aprovação','Pedido','Recebimento'];
@@ -156,7 +155,7 @@ function formCompra(id, pidPrefill){
       field('Item', '<input id="c-item" list="dl-produtos" value="'+esc(c.item || '')+'" placeholder="Produto do estoque ou descrição livre"'+dis(edSol)+'>', 'full', 'Se for um produto do estoque, escolha da lista: no recebimento ele entra no saldo automaticamente.') +
       field('Quantidade', '<input type="number" id="c-qtd" min="1" step="1" value="'+esc(c.qtd || 1)+'"'+dis(edSol)+'>') +
       field('Unidade', '<select id="c-un"'+dis(edSol)+'>'+optList(unidadesOpts(c.unidade), (c.unidade || 'UN').toUpperCase())+'</select>') +
-      field('Centro / unidade', '<select id="c-unid"'+dis(edSol)+'>'+optList(empresas, c.unidadeId, 'Selecione...')+'</select>', '', empresas.length ? '' : 'Cadastre em Cadastros → Centros / unidades') +
+      field('Centro / unidade', '<select id="c-unid"'+dis(edSol)+'>'+centrosOptsHtml(c.unidadeId)+'</select>', '', 'Cliente ou empresa que vai usar o item') +
       field('Necessário até', '<input type="date" id="c-nec" value="'+esc(c.necessidade || '')+'"'+dis(edSol)+'>') +
       field('Prioridade', '<select id="c-urg"'+dis(edSol)+'>'+optList([['0','Normal'],['1','Urgente']], c.urgente ? '1' : '0')+'</select>') +
       field('Justificativa / necessidade', '<input id="c-just" value="'+esc(c.justificativa || '')+'" placeholder="Para que e por que precisa"'+dis(edSol)+'>') +
@@ -392,7 +391,7 @@ formHandlers['cmp-cancelar'] = function(btn){
 formHandlers['export-compras'] = function(){
   exportXlsx('compras', cmpFiltrar().map(function(c){
     var k = cmpCalc(c), q = function(i){ var x = k.qs.find(function(z){ return z.i === i; }); return x ? x.fornecedor + ' — ' + fmtR(x.preco) : ''; };
-    return {'Solicitação':cmpNumero(c), 'Data':fmtD(fmtISO(c.criadoEm)), 'Solicitante':c.solicitante || '', 'Item':c.item, 'Quantidade':+c.qtd, 'Unidade':c.unidade || '', 'Centro / unidade':nomeEmpresa(c.unidadeId) === '—' ? '' : nomeEmpresa(c.unidadeId),
+    return {'Solicitação':cmpNumero(c), 'Data':fmtD(fmtISO(c.criadoEm)), 'Solicitante':c.solicitante || '', 'Item':c.item, 'Quantidade':+c.qtd, 'Unidade':c.unidade || '', 'Centro / unidade':c.unidadeId ? nomeCentro(c.unidadeId) : '',
       'Necessidade':fmtD(c.necessidade), 'Urgente':c.urgente ? 'Sim' : 'Não', 'Justificativa':c.justificativa || '', 'Cotação 1':q(0), 'Cotação 2':q(1), 'Cotação 3':q(2),
       'Fornecedor escolhido':k.escolhida ? k.escolhida.fornecedor : '', 'Preço unitário':k.escolhida ? k.escolhida.preco : '', 'Preço total':k.escolhida ? Math.round(k.total * 100) / 100 : '', 'Prazo de pagamento':k.escolhida ? k.escolhida.prazoPgto : '',
       'Economia (R$)':Math.round(k.economia * 100) / 100, 'Economia (%)':k.economia ? Math.round(k.economiaPct * 10) / 10 : 0,

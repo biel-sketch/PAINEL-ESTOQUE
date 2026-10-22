@@ -3,7 +3,7 @@
 Painel de estoque de EPIs, uniformes e materiais do Grupo Login Serv, no mesmo padrão dos painéis RH e DP: um único `index.html` publicado no GitHub Pages, com login pelo Firebase Authentication e dados no Firebase Realtime Database (nó `painel-estoque`).
 
 ## Menu
-São 6 módulos com subabas no topo: **Início** · **Estoque** (Saldo, Movimentações, Produtos, CA e estoque mínimo) · **Entregas de EPI** (Entregas, Empregados, Trocas pendentes) · **Compras** · **Relatórios** · **Cadastros** (Centros/unidades, Cargos e kits, Locais, Sistema).
+São 6 módulos com subabas no topo: **Início** · **Estoque** (Saldo, Movimentações, Produtos, CA e estoque mínimo) · **Entregas de EPI** (Entregas, Empregados, Trocas pendentes) · **Compras** · **Relatórios** · **Cadastros** (Clientes, Empresas, Cargos e kits, Locais, Sistema).
 
 ## Funcionalidades
 - **Posição de estoque** por produto, tamanho e local, com saldo mínimo e exportação para Excel.
@@ -14,7 +14,8 @@ São 6 módulos com subabas no topo: **Início** · **Estoque** (Saldo, Moviment
 - **Validade e CA**: trocas vencidas ou próximas (pela vida útil), CA vencido ou a vencer, estoque mínimo.
 - **Consulta automática de CA**: ao digitar o nº do CA, o painel busca validade, situação, fabricante e "aprovado para" na base oficial CAEPI do Ministério do Trabalho. A base é baixada todo dia pelo workflow `.github/workflows/atualizar-caepi.yml` e publicada em `ca/`.
 - **Compras — cotação e aprovação**: solicitação (item, quantidade, centro/unidade, necessidade), 3 cotações com fornecedor, preço, prazo de pagamento e entrega, escolha com justificativa quando não for a menor, economia vs. maior cotação, aprovação/reprovação, pedido com entrega prevista e recebimento com entrada automática no estoque. Etapas: Em cotação → Aguardando aprovação → Aprovada → Pedido emitido → Recebida.
-- **Relatórios**: consumo por período e por empresa, exportáveis para Excel.
+- **Clientes**: cadastro montado sozinho a partir do campo Cliente dos colaboradores (com divisão por empresa); renomear um cliente atualiza os colaboradores.
+- **Relatórios**: consumo por período, por cliente e por empresa, exportáveis para Excel.
 - **Perfis**: Administrador, Almoxarife, Técnico de SST, Comprador, Aprovador e Consulta, além de log de auditoria e backup.
 
 ## Como ativar o Firebase

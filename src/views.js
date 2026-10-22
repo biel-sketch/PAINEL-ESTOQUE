@@ -2,7 +2,7 @@
 // NAVEGAÇÃO E RENDERIZAÇÃO
 // =====================================================================
 var curView = 'dashboard', curMod = 'inicio', curSub = 'resumo';
-var tabs = {validade:'trocas', relatorios:'consumo', cadastros:'empresas'};
+var tabs = {validade:'trocas', relatorios:'consumo', cadastros:'clientes'};
 var renderQueued = false;
 
 // Menu enxuto: 6 módulos; cada um com poucas subabas no topo da página.
@@ -20,7 +20,8 @@ var MODULES = [
   {id:'compras', label:'Compras — cotação e aprovação', subs:[{id:'painel', label:'Painel', view:'compras'}]},
   {id:'relatorios', label:'Relatórios', subs:[{id:'rel', label:'Relatórios', view:'relatorios'}]},
   {id:'cadastros', label:'Cadastros', subs:[
-    {id:'empresas', label:'Centros / unidades', view:'cadastros', tab:'empresas', tabsVisiveis:[]},
+    {id:'clientes', label:'Clientes', view:'cadastros', tab:'clientes', tabsVisiveis:[]},
+    {id:'empresas', label:'Empresas', view:'cadastros', tab:'empresas', tabsVisiveis:[]},
     {id:'cargos', label:'Cargos e kits de EPI', view:'cadastros', tab:'cargos', tabsVisiveis:[]},
     {id:'locais', label:'Locais de estoque', view:'cadastros', tab:'locais', tabsVisiveis:[]},
     {id:'sistema', label:'Sistema', view:'config', admin:true}]}
@@ -33,6 +34,7 @@ function scheduleRender(){
 }
 function renderAll(){
   fillSelects();
+  syncClientes();
   updateBadges();
   renderView(curView);
   if(modalRefresh) modalRefresh();
@@ -123,6 +125,7 @@ function fillSelects(){
     s.innerHTML = '<option value="">' + esc(s.dataset.all || 'Selecione...') + '</option>' + empresas.map(function(e){ return '<option value="'+e._id+'">'+esc(e.nome)+'</option>'; }).join('');
     s.value = v;
   });
+  $$('.sel-centros').forEach(function(s){ var v = s.value; s.innerHTML = centrosOptsHtml(v, s.dataset.all); s.value = v; });
   $$('.sel-locais').forEach(function(s){
     var v = s.value;
     s.innerHTML = '<option value="">' + esc(s.dataset.all || 'Selecione...') + '</option>' + locais.map(function(e){ return '<option value="'+e._id+'">'+esc(e.nome)+'</option>'; }).join('');
@@ -440,13 +443,15 @@ function renderValidade(){
 function renderCadastros(){
   var t = tabs.cadastros, h = '';
   $('#cad-novo').disabled = !can('cadastros');
-  $('#cad-novo').textContent = {empresas:'+ Nova empresa', cargos:'+ Novo cargo', locais:'+ Novo local'}[t];
-  if(t === 'empresas'){
+  $('#cad-novo').textContent = {clientes:'+ Novo cliente', empresas:'+ Nova empresa', cargos:'+ Novo cargo', locais:'+ Novo local'}[t];
+  if(t === 'clientes'){
+    h = renderClientesTab();
+  } else if(t === 'empresas'){
     var l = vals(DB.empresas).sort(byName);
-    h = l.length ? '<table><thead><tr><th>Empresa / unidade</th><th>CNPJ</th><th>Cidade</th><th class="num">Empregados ativos</th></tr></thead><tbody>' + l.map(function(e){
+    h = l.length ? '<table><thead><tr><th>Empresa</th><th>CNPJ</th><th>Cidade</th><th class="num">Empregados ativos</th></tr></thead><tbody>' + l.map(function(e){
       var n = vals(DB.empregados).filter(function(x){ return x.empresaId === e._id && x.ativo !== false; }).length;
       return '<tr class="row-clickable" data-act="editar-empresa" data-id="'+e._id+'"><td>'+esc(e.nome)+'</td><td class="mono">'+esc(e.cnpj || '—')+'</td><td>'+esc(e.cidade || '—')+'</td><td class="num">'+n+'</td></tr>';
-    }).join('') + '</tbody></table>' : emptyState('Cadastre as empresas/clientes onde os empregados trabalham (ex.: Eucatex, Femsa Marília).');
+    }).join('') + '</tbody></table>' : emptyState('Cadastre as empresas empregadoras (ex.: Login Serv, Solutions). Elas também são criadas pela importação de colaboradores.');
   } else if(t === 'cargos'){
     var c = vals(DB.cargos).sort(byName);
     h = c.length ? '<table><thead><tr><th>Cargo</th><th>Kit de EPI / uniforme</th><th class="num">Empregados</th></tr></thead><tbody>' + c.map(function(g){
@@ -489,15 +494,16 @@ function renderRelatorios(){
       return '<tr><td>'+esc(p.nome)+'</td><td>'+esc(p.categoria || '')+'</td><td class="mono">'+esc(tamLabel(r.tk))+'</td><td class="num">'+fmtN(r.qtd)+'</td><td class="num">'+(r.valor ? fmtR(r.valor) : '—')+'</td></tr>';
     }).join('') + '</tbody></table>' : emptyState('Nenhuma entrega no período.')) + '</div></div>';
   } else {
+    var porCli = t === 'cliente';
     var ge = {};
-    movs.forEach(function(m){ var e = DB.empregados[m.empregadoId] || {}; var k = e.empresaId || '_'; ge[k] = ge[k] || {empresa:k, qtd:0, valor:0, pessoas:{}}; ge[k].qtd += +m.qtd; ge[k].valor += (+m.qtd) * (+m.custoUnit || +(DB.produtos[m.pid] || {}).custo || 0); ge[k].pessoas[m.empregadoId] = 1; });
+    movs.forEach(function(m){ var e = DB.empregados[m.empregadoId] || {}; var k = porCli ? (e.cliente ? cliKey(e.cliente) : '_') : (e.empresaId || '_'); ge[k] = ge[k] || {empresa:k, nome: porCli ? (e.cliente || 'Sem cliente') : nomeEmpresa(e.empresaId), qtd:0, valor:0, pessoas:{}}; ge[k].qtd += +m.qtd; ge[k].valor += (+m.qtd) * (+m.custoUnit || +(DB.produtos[m.pid] || {}).custo || 0); ge[k].pessoas[m.empregadoId] = 1; });
     var re = vals(ge).sort(function(a, b){ return b.qtd - a.qtd; });
-    relData = {nome:'consumo-por-empresa', rows: re.map(function(r){ var n = Object.keys(r.pessoas).length; return {Empresa:nomeEmpresa(r.empresa), Empregados:n, Itens:r.qtd, Valor:Math.round(r.valor * 100) / 100, 'Valor por empregado':n ? Math.round(r.valor / n * 100) / 100 : 0}; })};
+    relData = {nome: porCli ? 'consumo-por-cliente' : 'consumo-por-empresa', rows: re.map(function(r){ var n = Object.keys(r.pessoas).length; var o = {}; o[porCli ? 'Cliente' : 'Empresa'] = r.nome; return Object.assign(o, { Empregados:n, Itens:r.qtd, Valor:Math.round(r.valor * 100) / 100, 'Valor por empregado':n ? Math.round(r.valor / n * 100) / 100 : 0}); })};
     var mx = re.length ? re[0].qtd : 1;
-    h = '<div class="panel"><div class="panel-head"><span class="panel-title">Itens entregues por empresa — '+fmtD(de)+' a '+fmtD(ate)+'</span></div>' + (re.length ? '<div class="bars">' + re.map(function(r){
+    h = '<div class="panel"><div class="panel-head"><span class="panel-title">Itens entregues por '+(porCli ? 'cliente' : 'empresa')+' — '+fmtD(de)+' a '+fmtD(ate)+'</span></div>' + (re.length ? '<div class="bars">' + re.map(function(r){
       return '<div class="bar-row"><span class="bar-label">'+esc(nomeEmpresa(r.empresa))+'</span><div class="bar-track"><div class="bar-fill" style="width:'+(r.qtd / mx * 100)+'%"></div></div><span class="bar-val">'+fmtN(r.qtd)+'</span></div>';
-    }).join('') + '</div><div class="table-wrap"><table><thead><tr><th>Empresa</th><th class="num">Empregados atendidos</th><th class="num">Itens</th><th class="num">Valor</th><th class="num">Valor / empregado</th></tr></thead><tbody>' + relData.rows.map(function(r){
-      return '<tr><td>'+esc(r.Empresa)+'</td><td class="num">'+r.Empregados+'</td><td class="num">'+fmtN(r.Itens)+'</td><td class="num">'+(r.Valor ? fmtR(r.Valor) : '—')+'</td><td class="num">'+(r['Valor por empregado'] ? fmtR(r['Valor por empregado']) : '—')+'</td></tr>';
+    }).join('') + '</div><div class="table-wrap"><table><thead><tr><th>'+(porCli ? 'Cliente' : 'Empresa')+'</th><th class="num">Empregados atendidos</th><th class="num">Itens</th><th class="num">Valor</th><th class="num">Valor / empregado</th></tr></thead><tbody>' + relData.rows.map(function(r){
+      return '<tr><td>'+esc(r.Cliente || r.Empresa)+'</td><td class="num">'+r.Empregados+'</td><td class="num">'+fmtN(r.Itens)+'</td><td class="num">'+(r.Valor ? fmtR(r.Valor) : '—')+'</td><td class="num">'+(r['Valor por empregado'] ? fmtR(r['Valor por empregado']) : '—')+'</td></tr>';
     }).join('') + '</tbody></table></div>' : emptyState('Nenhuma entrega no período.')) + '</div>';
   }
   $('#rel-body').innerHTML = h;

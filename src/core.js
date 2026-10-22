@@ -43,7 +43,8 @@ var USER_ROLES = [
 // HELPERS
 // =====================================================================
 var FB_ON = !!(firebaseConfig.apiKey && firebaseConfig.apiKey !== 'COLE_AQUI' && firebaseConfig.databaseURL);
-var COLS = ['produtos','saldos','movimentos','entregas','empregados','empresas','cargos','locais','compras','config','logs'];
+var COLS = ['produtos','saldos','movimentos','entregas','empregados','empresas','cargos','locais','compras','clientes','config','logs'];
+var DB_LOADED = {};
 var DB = {}; COLS.forEach(function(c){ DB[c] = {}; });
 
 function $(s, el){ return (el||document).querySelector(s); }
@@ -100,7 +101,7 @@ function firebaseStore(){
     start: function(){
       COLS.forEach(function(c){
         var ref = c === 'logs' ? root.child(c).limitToLast(300) : root.child(c);
-        var fn = function(snap){ DB[c] = snap.val() || {}; scheduleRender(); };
+        var fn = function(snap){ DB[c] = snap.val() || {}; DB_LOADED[c] = true; scheduleRender(); };
         ref.on('value', fn, function(err){ console.error(c, err); setSync('err', 'Erro de acesso'); });
         listeners.push([ref, fn]);
       });
@@ -139,6 +140,7 @@ function localStore(){
   return {
     start: function(){
       try{ var s = JSON.parse(localStorage.getItem(K) || 'null'); if(s) COLS.forEach(function(c){ DB[c] = s[c] || {}; }); }catch(e){}
+      COLS.forEach(function(c){ DB_LOADED[c] = true; });
       setSync('syncing', 'Modo local'); scheduleRender();
     },
     stop: function(){},
