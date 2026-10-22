@@ -44,7 +44,7 @@ function handleAction(a, el){
     case 'print-termo': printTermo(id); break;
     case 'salvar-config': salvarConfig(); break;
     case 'backup': downloadBackup(); break;
-    case 'importar-empregados': $('#file-import').value = ''; $('#file-import').click(); break;
+    case 'importar-empregados': importMode = 'empregados'; $('#file-import').value = ''; $('#file-import').click(); break;
     case 'export-estoque': exportEstoque(); break;
     case 'export-movs': exportXlsx('movimentacoes', filtroMovs().map(function(m){ var e = DB.empregados[m.empregadoId] || {}; var p = DB.produtos[m.pid] || {}; return {Data:fmtD(m.data), Tipo:(MOV_TIPOS[m.tipo] || {}).label || m.tipo, Produto:p.nome, CA:p.ca || '', Tamanho:tamLabel(m.tk), Quantidade:m.qtd * (((MOV_TIPOS[m.tipo] || {}).sinal) === -1 ? -1 : 1), 'Afeta saldo':((MOV_TIPOS[m.tipo] || {}).sinal) === 0 ? 'Não' : 'Sim', Local:nomeLocal(m.loc), Empregado:e.nome || '', Fornecedor:m.fornecedor || '', NF:m.doc || '', Motivo:m.motivo || '', 'Custo unit.':m.custoUnit || '', Usuario:m.usuario}; })); break;
     case 'export-produtos': exportXlsx('produtos', vals(DB.produtos).sort(byName).map(function(p){ return {Produto:p.nome, Categoria:p.categoria, CA:p.ca || '', 'Validade CA':fmtD(p.validadeCA), Fabricante:p.fabricante || '', 'Vida util (dias)':p.vidaUtilDias || '', Tamanhos:(p.tamanhos || []).join(', '), 'Estoque minimo':p.estoqueMinimo || 0, Custo:p.custo || 0, Saldo:saldoProduto(p._id), Ativo:p.ativo === false ? 'Não' : 'Sim'}; })); break;
@@ -587,7 +587,7 @@ function onImportFile(ev){
     try{
       var wb = XLSX.read(new Uint8Array(r.result), {type:'array', cellDates:true});
       var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
-      previewImport(rows);
+      if(importMode === 'produtos') previewImportProdutos(rows); else previewImport(rows);
     }catch(e){ console.error(e); toast('Não consegui ler a planilha.', 'err'); }
   };
   r.readAsArrayBuffer(f);

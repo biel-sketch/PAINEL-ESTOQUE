@@ -7,6 +7,7 @@ São 6 módulos com subabas no topo: **Início** · **Estoque** (Saldo, Moviment
 
 ## Funcionalidades
 - **Posição de estoque** por produto, tamanho e local, com saldo mínimo e exportação para Excel.
+- **Importação de produtos/EPIs** por planilha (com modelo): cria ou atualiza produtos, junta tamanhos, completa a validade do CA pela base oficial e, opcionalmente, lança as quantidades como saldo inicial.
 - **Movimentações**: entrada (NF, fornecedor e custo, com custo médio automático), ajuste e inventário, transferência entre locais e baixa.
 - **Entregas de EPI**: kit sugerido pelo cargo, tamanho de calçado/calça/camisa/luva guardado a cada entrega e sugerido na próxima, bloqueio de saldo insuficiente e termo de recebimento (NR-6) impresso para assinatura.
 - **Devoluções**: o item volta ao estoque ou é descartado.
