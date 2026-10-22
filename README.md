@@ -8,7 +8,7 @@ São 6 módulos com subabas no topo: **Início** · **Estoque** (Saldo, Moviment
 ## Funcionalidades
 - **Posição de estoque** por produto, tamanho e local, com saldo mínimo e exportação para Excel.
 - **Movimentações**: entrada (NF, fornecedor e custo, com custo médio automático), ajuste e inventário, transferência entre locais e baixa.
-- **Entregas de EPI**: kit sugerido pelo cargo, tamanho puxado do cadastro do empregado, bloqueio de saldo insuficiente, assinatura na tela e termo de recebimento (NR-6) para imprimir.
+- **Entregas de EPI**: kit sugerido pelo cargo, tamanho de calçado/calça/camisa/luva guardado a cada entrega e sugerido na próxima, bloqueio de saldo insuficiente e termo de recebimento (NR-6) impresso para assinatura.
 - **Devoluções**: o item volta ao estoque ou é descartado.
 - **Empregados**: itens em posse, histórico e importação da planilha do RH.
 - **Validade e CA**: trocas vencidas ou próximas (pela vida útil), CA vencido ou a vencer, estoque mínimo.

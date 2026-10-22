@@ -57,6 +57,7 @@ function handleAction(a, el){
   }
 }
 var formHandlers = {};
+function tamanhosTxt(e){ var t = (e && e.tamanhos) || {}, l = [['calcado','Calçado'],['calca','Calça'],['camisa','Camisa'],['luva','Luva']].filter(function(x){ return t[x[0]]; }); return l.map(function(x){ return x[1] + ' <b>' + esc(t[x[0]]) + '</b>'; }).join(' · '); }
 function onPick(el, fn){ var last = null; ['input','change'].forEach(function(ev){ el.addEventListener(ev, function(){ if(el.value === last && ev === 'change') return; last = el.value; fn(); }); }); }
 
 // Linha de item com produto (datalist) + tamanho
@@ -297,7 +298,7 @@ function verProduto(pid){
 }
 
 // =====================================================================
-// ENTREGA DE EPI (com kit do cargo, tamanhos e assinatura)
+// ENTREGA DE EPI (kit do cargo; tamanhos guardados a cada entrega)
 // =====================================================================
 var sigPad = null;
 function grupoTamanho(p){
@@ -320,13 +321,11 @@ function formEntrega(empId){
     '<table class="items-table"><thead><tr><th style="width:46%">Produto</th><th>Tamanho</th><th style="width:80px">Qtd</th><th>Próxima troca</th><th style="width:36px"></th></tr></thead><tbody id="e-itens"></tbody></table>' +
     '<button class="btn btn-sm" style="margin-top:8px" data-act="add-item-entrega">+ Adicionar item</button>' +
     field('Observação', '<input id="e-obs">', 'full') +
-    '<div class="section-label">Assinatura do empregado</div><div class="sig-wrap"><canvas id="e-sig"></canvas><button class="btn btn-sm sig-clear" data-act="limpar-assinatura" style="background:#fff;color:#333;border-color:#ccc">Limpar</button><span class="sig-hint">Assine aqui com o dedo ou o mouse</span></div>' +
-    '<label class="modal-check"><input type="checkbox" id="e-print" checked> Imprimir o termo de recebimento ao salvar</label>' +
+    '<label class="modal-check"><input type="checkbox" id="e-print" checked> Imprimir o termo de recebimento para assinatura</label>' +
     modalActions('Registrar entrega', 'salvar-entrega'), 'wide');
   onPick($('#e-emp'), entregaEmpChanged);
   $('#e-data').addEventListener('change', function(){ $$('#e-itens tr').forEach(function(tr){ refreshItemEntrega(tr); }); });
   $('#e-loc').addEventListener('change', function(){ $$('#e-itens tr').forEach(function(tr){ refreshItemEntrega(tr); }); });
-  sigPad = initSignature($('#e-sig'));
   entregaEmpChanged();
   if(e && e.cargoId && (DB.cargos[e.cargoId] || {}).kit && itensEmPosse(empId).length === 0) carregarKit();
   else addItemEntrega();
@@ -337,7 +336,7 @@ function entregaEmpChanged(){
   var t = e.tamanhos || {}, posse = itensEmPosse(id);
   box.innerHTML = '<div class="info-grid" style="background:#0D1526;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0">' +
     '<div><div class="lbl">Empresa</div>'+esc(nomeEmpresa(e.empresaId))+'</div><div><div class="lbl">Cargo</div>'+esc(nomeCargo(e.cargoId))+'</div>' +
-    '<div><div class="lbl">Tamanhos</div>Camisa '+esc(t.camisa || '—')+' · Calça '+esc(t.calca || '—')+' · Calçado '+esc(t.calcado || '—')+' · Luva '+esc(t.luva || '—')+'</div>' +
+    (tamanhosTxt(e) ? '<div><div class="lbl">Tamanhos da última entrega</div>'+tamanhosTxt(e)+'</div>' : '<div><div class="lbl">Cliente</div>'+esc(e.cliente || '—')+'</div>') +
     '<div><div class="lbl">Em posse</div>'+(posse.length ? posse.map(function(x){ return esc(x.aberto + '× ' + nomeProd(x.item.pid)); }).join(', ') : 'Nada')+'</div></div>';
   $$('#e-itens tr').forEach(function(tr){ refreshItemEntrega(tr, true); });
 }
@@ -387,7 +386,6 @@ function carregarKit(){
 }
 formHandlers['carregar-kit'] = carregarKit;
 formHandlers['add-item-entrega'] = function(){ addItemEntrega(); };
-formHandlers['limpar-assinatura'] = function(){ if(sigPad) sigPad.clear(); };
 formHandlers['salvar-entrega'] = function(btn){
   var empId = findEmpByLabel($('#e-emp').value); if(!empId) return formError('Escolha o empregado.');
   var loc = $('#e-loc').value, data = $('#e-data').value || today(), itens = [], bad = null;
@@ -401,7 +399,6 @@ formHandlers['salvar-entrega'] = function(btn){
   });
   if(bad) return formError(bad);
   if(!itens.length) return formError('Adicione pelo menos um item.');
-  var assinatura = sigPad && !sigPad.isEmpty() ? sigPad.toDataURL() : '';
   var imprimir = $('#e-print').checked;
   busy(btn, true);
   applyStock(itens.map(function(i){ return {pid:i.pid, tk:i.tk, loc:loc, delta:-i.qtd}; })).then(function(){
@@ -409,7 +406,9 @@ formHandlers['salvar-entrega'] = function(btn){
     // itens anteriores do mesmo produto ficam marcados como substituídos (não entram mais nas trocas pendentes)
     itensEmPosse(empId).forEach(function(x){ if(itens.some(function(i){ return i.pid === x.item.pid; })) paths['entregas/' + x.entregaId + '/itens/' + x.idx + '/substituidoPor'] = entId; });
     itens.forEach(function(i){ paths['movimentos/' + store.key()] = movRecord({data:data, tipo:'entrega', pid:i.pid, tk:i.tk, loc:loc, qtd:i.qtd, empregadoId:empId, entregaId:entId, custoUnit:(DB.produtos[i.pid] || {}).custo || undefined, motivo:$('#e-mot').value}); });
-    paths['entregas/' + entId] = {data:data, ts:nowTs(), empregadoId:empId, loc:loc, motivo:$('#e-mot').value, obs:$('#e-obs').value.trim(), itens:itens, assinatura:assinatura, usuario:currentUser.name};
+    // guarda o tamanho usado (calçado, calça, camisa, luva) para sugerir na próxima entrega
+    itens.forEach(function(i){ if(i.tk && i.tk !== 'UN' && DB.produtos[i.pid]) paths['empregados/' + empId + '/tamanhos/' + grupoTamanho(DB.produtos[i.pid])] = i.tk; });
+    paths['entregas/' + entId] = {data:data, ts:nowTs(), empregadoId:empId, loc:loc, motivo:$('#e-mot').value, obs:$('#e-obs').value.trim(), itens:itens, usuario:currentUser.name};
     return save(paths, 'Entrega de EPI', (DB.empregados[empId] || {}).nome + ' — ' + itens.length + ' item(ns)').then(function(){ return entId; });
   }).then(function(entId){ closeModal(); toast('Entrega registrada.'); if(imprimir) setTimeout(function(){ printTermo(entId); }, 150); })
     .catch(function(e){ busy(btn, false); formError(e.message); });
@@ -477,9 +476,6 @@ function formEmpregado(id){
     field('Cargo', '<select id="m-car">'+optList(car, e.cargoId, 'Selecione...')+'</select>', '', car.length ? '' : 'Cadastre em Cadastros > Cargos') +
     field('Admissão', '<input type="date" id="m-adm" value="'+esc(e.admissao || '')+'">') +
     field('CPF', '<input id="m-cpf" value="'+esc(e.cpf || '')+'" placeholder="Opcional">') +
-    '</div><div class="section-label">Tamanhos</div><div class="modal-grid" style="grid-template-columns:repeat(4,1fr)">' +
-    field('Camisa / jaleco', '<input id="m-t-camisa" value="'+esc(t.camisa || '')+'" placeholder="P, M, G...">') + field('Calça', '<input id="m-t-calca" value="'+esc(t.calca || '')+'">') +
-    field('Calçado', '<input id="m-t-calcado" value="'+esc(t.calcado || '')+'" placeholder="38, 40...">') + field('Luva', '<input id="m-t-luva" value="'+esc(t.luva || '')+'">') +
     '</div><div class="modal-grid" style="margin-top:12px">' + field('Situação', '<select id="m-ativo">'+optList([['1','Ativo'],['0','Desligado']], e.ativo === false ? '0' : '1')+'</select>') + '</div>' +
     (id ? '<input type="hidden" id="m-id" value="'+id+'">' : '') + modalActions('Salvar', 'salvar-empregado'), 'wide');
 }
@@ -488,7 +484,6 @@ formHandlers['salvar-empregado'] = function(btn){
   var cpf = $('#m-cpf').value.replace(/\D/g, '');
   if(cpf && vals(DB.empregados).some(function(x){ return x._id !== id && x.cpf && x.cpf.replace(/\D/g, '') === cpf; })) return formError('Já existe um empregado com esse CPF.');
   var rec = Object.assign({}, id ? DB.empregados[id] : {}, {nome:nome, cpf:$('#m-cpf').value.trim(), empresaId:$('#m-emp').value, cliente:$('#m-cli').value.trim(), cargoId:$('#m-car').value, admissao:$('#m-adm').value,
-    tamanhos:{camisa:$('#m-t-camisa').value.trim().toUpperCase(), calca:$('#m-t-calca').value.trim().toUpperCase(), calcado:$('#m-t-calcado').value.trim().toUpperCase(), luva:$('#m-t-luva').value.trim().toUpperCase()},
     ativo:$('#m-ativo').value === '1', atualizadoEm:nowTs()});
   delete rec._id;
   var key = id || store.key(), p = {}; p['empregados/' + key] = rec;
@@ -501,15 +496,15 @@ function fichaEmpregado(id){
   var hist = vals(DB.entregas).filter(function(en){ return en.empregadoId === id && !en.cancelada; }).sort(function(a, b){ return b.ts - a.ts; });
   openModal('<div class="modal-title">'+esc(e.nome)+(e.ativo === false ? ' <span class="pill gray">Desligado</span>' : '')+'</div><div class="info-grid">' +
     '<div><div class="lbl">Empresa</div>'+esc(nomeEmpresa(e.empresaId))+'</div><div><div class="lbl">Cliente</div>'+esc(e.cliente || '—')+'</div><div><div class="lbl">Cargo</div>'+esc(nomeCargo(e.cargoId))+'</div><div><div class="lbl">Admissão</div>'+fmtD(e.admissao)+'</div>' +
-    '<div><div class="lbl">CPF</div>'+esc(e.cpf || '—')+'</div><div style="grid-column:span 3"><div class="lbl">Tamanhos</div>Camisa '+esc(t.camisa || '—')+' · Calça '+esc(t.calca || '—')+' · Calçado '+esc(t.calcado || '—')+' · Luva '+esc(t.luva || '—')+'</div></div>' +
+    '<div><div class="lbl">CPF</div>'+esc(e.cpf || '—')+'</div><div style="grid-column:span 3"><div class="lbl">Tamanhos (guardados nas entregas)</div>'+(tamanhosTxt(e) || '<span style="color:var(--text-faint)">Serão guardados na primeira entrega</span>')+'</div></div>' +
     '<div class="section-label">Itens em posse</div>' + (posse.length ? '<table class="items-table"><thead><tr><th>Item</th><th>Tam.</th><th class="num">Qtd</th><th>CA</th><th>Entregue</th><th>Troca prevista</th><th></th></tr></thead><tbody>' + posse.map(function(x){
       var d = daysUntil(x.item.proximaTroca);
       return '<tr><td>'+esc(nomeProd(x.item.pid))+'</td><td class="mono">'+esc(tamLabel(x.item.tk))+'</td><td class="num">'+x.aberto+'</td><td class="mono">'+esc(x.item.ca || '—')+'</td><td class="mono">'+fmtD(x.data)+'</td>' +
         '<td>'+(x.item.proximaTroca ? fmtD(x.item.proximaTroca) + ' <span class="pill '+(d < 0 ? 'red' : d <= +cfg('diasAlertaTroca', 15) ? 'amber' : 'gray')+'" style="padding:1px 7px;font-size:10.5px">'+(d < 0 ? 'vencida' : d + 'd')+'</span>' : '—')+'</td>' +
         '<td><button class="btn btn-sm" data-act="devolver" data-ent="'+x.entregaId+'" data-idx="'+x.idx+'"'+(can('entregar') ? '' : ' disabled')+'>Devolver</button></td></tr>';
     }).join('') + '</tbody></table>' : '<div style="color:var(--text-faint);font-size:12.5px">Nenhum item em posse.</div>') +
-    '<div class="section-label">Histórico de entregas</div>' + (hist.length ? '<table class="items-table"><thead><tr><th>Data</th><th>Itens</th><th>Motivo</th><th>Assinatura</th><th></th></tr></thead><tbody>' + hist.map(function(en){
-      return '<tr><td class="mono">'+fmtD(en.data)+'</td><td style="font-size:12px">'+(en.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk !== 'UN' ? ' (' + i.tk + ')' : '')) + (i.devolvido ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">dev. ' + i.devolvido + '</span>' : ''); }).join('<br>')+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'</td><td>'+(en.assinatura ? '<span class="pill teal">Sim</span>' : '<span class="pill amber">Não</span>')+'</td><td><button class="btn btn-sm" data-act="print-termo" data-id="'+en._id+'">Termo</button></td></tr>';
+    '<div class="section-label">Histórico de entregas</div>' + (hist.length ? '<table class="items-table"><thead><tr><th>Data</th><th>Itens</th><th>Motivo</th><th></th></tr></thead><tbody>' + hist.map(function(en){
+      return '<tr><td class="mono">'+fmtD(en.data)+'</td><td style="font-size:12px">'+(en.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk !== 'UN' ? ' (' + i.tk + ')' : '')) + (i.devolvido ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">dev. ' + i.devolvido + '</span>' : ''); }).join('<br>')+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'</td><td><button class="btn btn-sm" data-act="print-termo" data-id="'+en._id+'">Termo</button></td></tr>';
     }).join('') + '</tbody></table>' : '<div style="color:var(--text-faint);font-size:12.5px">Nenhuma entrega registrada.</div>') +
     '<div class="modal-actions"><button class="btn btn-ghost" data-act="fechar">Fechar</button>' +
     (can('empregados') ? '<button class="btn" data-act="editar-empregado" data-id="'+id+'">Editar</button>' : '') +
@@ -618,7 +613,7 @@ function previewImport(rows){
   openModal('<div class="modal-title">Importar empregados</div><div class="modal-sub">'+importRows.length+' linhas lidas · '+novos+' novos · '+atual+' já cadastrados (serão atualizados). Empresas e cargos que não existirem serão criados.</div>' +
     '<div class="table-wrap" style="max-height:340px;overflow:auto"><table class="items-table"><thead><tr><th>Nome</th><th>Empresa</th><th>Cliente</th><th>Cargo</th><th>Admissão</th></tr></thead><tbody>' +
     importRows.slice(0, 200).map(function(r){ return '<tr><td>'+esc(r.nome)+(findExistente(r) ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">atualizar</span>' : '')+'</td><td>'+esc(r.empresa)+'</td><td>'+esc(r.cliente || '—')+'</td><td>'+esc(r.cargo)+'</td><td class="mono">'+fmtD(r.admissao)+'</td></tr>'; }).join('') +
-    '</tbody></table></div><div class="modal-sub" style="margin-top:10px">Colunas reconhecidas: Nome, CPF, Empresa, Cliente (ou Posto), Cargo, Admissão, Camisa, Calça, Calçado, Luva.</div>' + modalActions('Importar ' + importRows.length, 'confirmar-import'), 'wide');
+    '</tbody></table></div><div class="modal-sub" style="margin-top:10px">Colunas reconhecidas: Nome, CPF, Empresa, Cliente (ou Posto), Cargo, Admissão.</div>' + modalActions('Importar ' + importRows.length, 'confirmar-import'), 'wide');
 }
 function findExistente(r){
   return vals(DB.empregados).find(function(e){ return (r.cpf && e.cpf && e.cpf.replace(/\D/g, '') === r.cpf.replace(/\D/g, '')) || norm(e.nome) === norm(r.nome); });

@@ -64,7 +64,7 @@ function exportEntregas(){
   var rows = [];
   filtroEntregas().forEach(function(en){
     var e = DB.empregados[en.empregadoId] || {};
-    (en.itens || []).forEach(function(i){ rows.push({Data:fmtD(en.data), Empregado:e.nome, Empresa:nomeEmpresa(e.empresaId), Cliente:e.cliente || '', Cargo:nomeCargo(e.cargoId), Produto:nomeProd(i.pid), Tamanho:tamLabel(i.tk), Quantidade:i.qtd, CA:i.ca || '', 'Proxima troca':fmtD(i.proximaTroca), Devolvido:i.devolvido || 0, Motivo:en.motivo || '', Assinado:en.assinatura ? 'Sim' : 'Não', Responsavel:en.usuario || ''}); });
+    (en.itens || []).forEach(function(i){ rows.push({Data:fmtD(en.data), Empregado:e.nome, Empresa:nomeEmpresa(e.empresaId), Cliente:e.cliente || '', Cargo:nomeCargo(e.cargoId), Produto:nomeProd(i.pid), Tamanho:tamLabel(i.tk), Quantidade:i.qtd, CA:i.ca || '', 'Proxima troca':fmtD(i.proximaTroca), Devolvido:i.devolvido || 0, Motivo:en.motivo || '', Responsavel:en.usuario || ''}); });
   });
   exportXlsx('entregas-epi', rows);
 }

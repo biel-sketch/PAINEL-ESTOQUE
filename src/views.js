@@ -359,12 +359,12 @@ function filtroEntregas(){
 function renderEntregas(){
   var list = filtroEntregas();
   if(!list.length){ $('#ent-table').innerHTML = emptyState('Nenhuma entrega no período.'); return; }
-  $('#ent-table').innerHTML = '<table><thead><tr><th>Data</th><th>Empregado</th><th>Itens</th><th>Motivo</th><th>Assinatura</th><th>Responsável</th><th></th></tr></thead><tbody>' +
+  $('#ent-table').innerHTML = '<table><thead><tr><th>Data</th><th>Empregado</th><th>Itens</th><th>Motivo</th><th>Responsável</th><th></th></tr></thead><tbody>' +
     list.map(function(en){
       var e = DB.empregados[en.empregadoId] || {};
       var itens = (en.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk && i.tk !== 'UN' ? ' (' + i.tk + ')' : '')); }).join('<br>');
       return '<tr><td class="mono">'+fmtD(en.data)+'</td><td><a href="#" data-act="ficha-empregado" data-id="'+en.empregadoId+'" style="color:var(--text)">'+esc(e.nome || '—')+'</a><span class="sub">'+esc(nomeEmpresa(e.empresaId))+(e.cliente ? ' · ' + esc(e.cliente) : '')+'</span></td>' +
-        '<td style="font-size:12px">'+itens+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'</td><td>'+(en.assinatura ? '<span class="pill teal">Assinado</span>' : '<span class="pill amber">Pendente</span>')+'</td>' +
+        '<td style="font-size:12px">'+itens+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'</td>' +
         '<td class="mono">'+esc(en.usuario || '')+'</td><td style="white-space:nowrap"><button class="btn btn-sm" data-act="print-termo" data-id="'+en._id+'">Termo</button></td></tr>';
     }).join('') + '</tbody></table><div class="tbl-foot">'+list.length+' entregas</div>';
 }
