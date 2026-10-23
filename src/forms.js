@@ -241,7 +241,9 @@ function formProduto(pid){
     field('Nº do CA', '<div style="display:flex;gap:8px"><input id="p-ca" value="'+esc(p.ca || '')+'" placeholder="Só para EPI" inputmode="numeric"><button class="btn btn-sm" data-act="consultar-ca" type="button">Consultar</button></div><input type="hidden" id="p-ca-sit" value="'+esc(p.caSituacao || '')+'">', '', 'Ao sair do campo, a validade é buscada na base oficial.') +
     field('Validade do CA', '<input type="date" id="p-val" value="'+esc(p.validadeCA || '')+'">') +
     '<div class="full" id="p-ca-info" style="grid-column:1/-1"></div>' +
-    field('Fabricante / marca', '<input id="p-fab" value="'+esc(p.fabricante || '')+'">', 'full') +
+    field('Grupo', '<input id="p-grupo" list="dl-grupos-prod" value="'+esc(p.grupo || '')+'" placeholder="Ex.: Luvas, Calçados, Uniforme">', '', 'Usado para agrupar as compras.') +
+    field('Fabricante / marca', '<input id="p-fab" value="'+esc(p.fabricante || '')+'">') +
+    '<datalist id="dl-grupos-prod">'+cmpGruposLista().map(function(g){ return '<option value="'+esc(g)+'">'; }).join('')+'</datalist>' +
     field('Vida útil (troca)', '<div style="display:flex;gap:8px"><input type="number" id="p-vu" min="0" value="'+vuN+'" style="width:90px"><select id="p-vuun">'+optList([['1','dias'],['30','meses'],['365','anos']], String(vuUn))+'</select></div>', '', 'Usada para calcular a próxima troca.') +
     field('Estoque mínimo', '<input type="number" id="p-min" min="0" value="'+(p.estoqueMinimo || 0)+'">', '', 'Gera alerta quando o saldo total ficar abaixo.') +
     field('Tamanhos', '<input id="p-tams" value="'+esc((p.tamanhos || []).join(', '))+'" placeholder="Ex.: P, M, G, GG  ou  36, 38, 40">', 'full', 'Separe por vírgula. Deixe vazio para produto de tamanho único.') +
@@ -259,7 +261,7 @@ formHandlers['salvar-produto'] = function(btn){
   var tams = $('#p-tams').value.split(',').map(function(t){ return tamKey(t); }).filter(function(t){ return t && t !== 'UN'; });
   var rec = Object.assign({}, pid ? DB.produtos[pid] : {}, {
     nome: nome, categoria: $('#p-cat').value, unidade: $('#p-un').value || 'UN', ca: $('#p-ca').value.trim(), validadeCA: $('#p-val').value,
-    fabricante: $('#p-fab').value.trim(), vidaUtilDias: Math.round(num($('#p-vu').value) * +$('#p-vuun').value), estoqueMinimo: Math.floor(num($('#p-min').value)),
+    fabricante: $('#p-fab').value.trim(), grupo: $('#p-grupo').value.trim(), vidaUtilDias: Math.round(num($('#p-vu').value) * +$('#p-vuun').value), estoqueMinimo: Math.floor(num($('#p-min').value)),
     tamanhos: tams, custo: num($('#p-custo').value), ativo: $('#p-ativo').value === '1', atualizadoEm: nowTs(),
     caSituacao: $('#p-ca').value.trim() ? $('#p-ca-sit').value : ''
   });
@@ -587,7 +589,7 @@ function onImportFile(ev){
     try{
       var wb = XLSX.read(new Uint8Array(r.result), {type:'array', cellDates:true});
       var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
-      if(importMode === 'produtos') previewImportProdutos(rows); else previewImport(rows);
+      if(importMode === 'produtos') previewImportProdutos(rows); else if(importMode === 'compras') previewImportCompras(rows); else previewImport(rows);
     }catch(e){ console.error(e); toast('Não consegui ler a planilha.', 'err'); }
   };
   r.readAsArrayBuffer(f);

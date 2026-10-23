@@ -92,7 +92,7 @@ function initUI(){
   });
   // filtros: re-renderiza a tabela ao digitar/alterar
   ['est-busca','est-cat','est-local','est-zerados','est-minimo','mov-busca','mov-tipo','mov-de','mov-ate','prod-busca','prod-cat','prod-status',
-   'ent-busca','ent-empresa','ent-de','ent-ate','emp-busca','emp-empresa','emp-cliente','emp-status','rel-de','rel-ate','rel-empresa','rel-cat','cmp-busca','cmp-unidade'].forEach(function(id){
+   'ent-busca','ent-empresa','ent-de','ent-ate','emp-busca','emp-empresa','emp-cliente','emp-status','rel-de','rel-ate','rel-empresa','rel-cat','cmp-busca','cmp-unidade','cmp-grupo'].forEach(function(id){
     var el = $('#' + id); if(!el) return;
     el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' || el.type === 'date' ? 'change' : 'input', function(){ renderView(curView); });
   });
@@ -332,7 +332,7 @@ function renderProdutos(){
   $('#prod-table').innerHTML = '<table><thead><tr><th>Produto</th><th>Categoria</th><th>CA</th><th>Validade CA</th><th>Vida útil</th><th>Tamanhos</th><th class="num">Mínimo</th><th class="num">Custo</th><th class="num">Saldo</th></tr></thead><tbody>' +
     rows.map(function(p){
       var ca = caStatus(p);
-      return '<tr class="row-clickable" data-act="editar-produto" data-id="'+p._id+'"><td>'+esc(p.nome)+(p.ativo === false ? ' <span class="pill gray">Inativo</span>' : '')+(p.fabricante ? '<span class="sub">'+esc(p.fabricante)+'</span>' : '')+'</td><td>'+esc(p.categoria || '')+'</td>' +
+      return '<tr class="row-clickable" data-act="editar-produto" data-id="'+p._id+'"><td>'+esc(p.nome)+(p.ativo === false ? ' <span class="pill gray">Inativo</span>' : '')+(p.fabricante ? '<span class="sub">'+esc(p.fabricante)+'</span>' : '')+'</td><td>'+esc(p.categoria || '')+(p.grupo ? '<span class="sub">'+esc(p.grupo)+'</span>' : '')+'</td>' +
         '<td class="mono">'+esc(p.ca || '—')+'</td><td>'+(p.ca ? fmtD(p.validadeCA) + ' <span class="pill '+ca.cls+'" style="padding:1px 7px;font-size:10.5px">'+ca.txt+'</span>' : '—')+'</td>' +
         '<td>'+vidaUtilTxt(p.vidaUtilDias)+'</td><td><div class="chips">'+(p.tamanhos || []).map(function(t){ return '<span class="chip">'+esc(t)+'</span>'; }).join('')+'</div></td>' +
         '<td class="num">'+(p.estoqueMinimo || '—')+'</td><td class="num">'+(p.custo ? fmtR(p.custo) : '—')+'</td><td class="num">'+fmtN(saldoProduto(p._id))+'</td></tr>';

@@ -11,7 +11,7 @@ formHandlers['importar-produtos'] = function(){
     '<div class="modal-sub">Use uma planilha do Excel (ou CSV) com uma linha por produto. Se o produto tiver tamanhos, pode usar uma linha por tamanho, com a quantidade de cada um.</div>' +
     '<table class="items-table"><thead><tr><th>Coluna</th><th>Obrigatória</th><th>Exemplo</th></tr></thead><tbody>' +
     [['Produto','Sim','BOTA BICO DE AÇO'],['CA','Não','28511'],['Validade CA','Não','25/11/2029 (se vazio, busca na base oficial pelo CA)'],['Categoria','Não','EPI, Uniforme ou Material (padrão: EPI)'],
-     ['Fabricante','Não','MARLUVAS'],['Vida útil','Não','6 meses, 1 ano ou 180 (dias)'],['Tamanho','Não','40'],['Quantidade','Não','12 (vira saldo inicial, se você marcar)'],
+     ['Grupo','Não','Luvas, Calçados, Uniforme (usado nas compras)'],['Fabricante','Não','MARLUVAS'],['Vida útil','Não','6 meses, 1 ano ou 180 (dias)'],['Tamanho','Não','40'],['Quantidade','Não','12 (vira saldo inicial, se você marcar)'],
      ['Unidade','Não','UN, PAR, CX...'],['Estoque mínimo','Não','10'],['Custo','Não','45,90']]
     .map(function(r){ return '<tr><td><b>'+r[0]+'</b></td><td>'+r[1]+'</td><td style="color:var(--text-dim)">'+esc(r[2])+'</td></tr>'; }).join('') + '</tbody></table>' +
     '<div class="modal-sub" style="margin-top:10px">Produtos que já existem (mesmo nome) são atualizados; os novos são criados. Nada é gravado antes da conferência.</div>' +
@@ -20,10 +20,10 @@ formHandlers['importar-produtos'] = function(){
 formHandlers['escolher-planilha-produtos'] = function(){ importMode = 'produtos'; $('#file-import').value = ''; $('#file-import').click(); };
 formHandlers['modelo-produtos'] = function(){
   exportXlsx('modelo-produtos', [
-    {'Produto':'BOTA BICO DE AÇO', 'CA':'28511', 'Validade CA':'', 'Categoria':'EPI', 'Fabricante':'', 'Vida útil':'1 ano', 'Tamanho':'40', 'Quantidade':6, 'Unidade':'PAR', 'Estoque mínimo':10, 'Custo':''},
-    {'Produto':'BOTA BICO DE AÇO', 'CA':'28511', 'Validade CA':'', 'Categoria':'EPI', 'Fabricante':'', 'Vida útil':'1 ano', 'Tamanho':'42', 'Quantidade':4, 'Unidade':'PAR', 'Estoque mínimo':'', 'Custo':''},
-    {'Produto':'MASCARA PROTECAO PFF2', 'CA':'46677', 'Validade CA':'', 'Categoria':'EPI', 'Fabricante':'', 'Vida útil':'15 dias', 'Tamanho':'', 'Quantidade':124, 'Unidade':'UN', 'Estoque mínimo':50, 'Custo':'2,50'},
-    {'Produto':'CALCA OPERACIONAL PRETA', 'CA':'', 'Validade CA':'', 'Categoria':'Uniforme', 'Fabricante':'', 'Vida útil':'6 meses', 'Tamanho':'M', 'Quantidade':35, 'Unidade':'UN', 'Estoque mínimo':'', 'Custo':''}
+    {'Produto':'BOTA BICO DE AÇO', 'CA':'28511', 'Validade CA':'', 'Categoria':'EPI', 'Grupo':'Calçados', 'Fabricante':'', 'Vida útil':'1 ano', 'Tamanho':'40', 'Quantidade':6, 'Unidade':'PAR', 'Estoque mínimo':10, 'Custo':''},
+    {'Produto':'BOTA BICO DE AÇO', 'CA':'28511', 'Validade CA':'', 'Categoria':'EPI', 'Grupo':'Calçados', 'Fabricante':'', 'Vida útil':'1 ano', 'Tamanho':'42', 'Quantidade':4, 'Unidade':'PAR', 'Estoque mínimo':'', 'Custo':''},
+    {'Produto':'MASCARA PROTECAO PFF2', 'CA':'46677', 'Validade CA':'', 'Categoria':'EPI', 'Grupo':'Proteção respiratória', 'Fabricante':'', 'Vida útil':'15 dias', 'Tamanho':'', 'Quantidade':124, 'Unidade':'UN', 'Estoque mínimo':50, 'Custo':'2,50'},
+    {'Produto':'CALCA OPERACIONAL PRETA', 'CA':'', 'Validade CA':'', 'Categoria':'Uniforme', 'Grupo':'Uniforme', 'Fabricante':'', 'Vida útil':'6 meses', 'Tamanho':'M', 'Quantidade':35, 'Unidade':'UN', 'Estoque mínimo':'', 'Custo':''}
   ]);
 };
 
@@ -55,7 +55,8 @@ function previewImportProdutos(rows){
     var ca = String(pick(r, ['ca','n ca','no ca','n. ca','nº ca','n° ca','numero ca','numero do ca','certificado de aprovacao'])).replace(/\D/g, '');
     setIf('ca', ca);
     setIf('validadeCA', toIso(pick(r, ['validade ca','validade do ca','vencimento ca','vencimento do ca','validade'])));
-    var cat = pick(r, ['categoria','tipo','grupo']); if(cat !== '') setIf('categoria', parseCategoria(cat));
+    var cat = pick(r, ['categoria','tipo']); if(cat !== '') setIf('categoria', parseCategoria(cat));
+    var grp = String(pick(r, ['grupo','subgrupo','familia','linha'])).trim(); if(grp){ setIf('grupo', grp); if(cat === '') setIf('categoria', parseCategoria(grp)); }
     setIf('fabricante', String(pick(r, ['fabricante','marca'])).trim());
     var vu = parseVidaUtil(pick(r, ['vida util','vida util (dias)','vida util dias','periodicidade de troca','troca','periodicidade'])); if(vu) setIf('vidaUtilDias', vu);
     var un = String(pick(r, ['unidade','un','und','unid'])).trim().toUpperCase(); if(un) setIf('unidade', un);
@@ -109,7 +110,7 @@ formHandlers['confirmar-import-produtos'] = function(btn){
     var base = g.existenteId ? Object.assign({}, DB.produtos[id]) : {categoria:'EPI', unidade:'UN', ativo:true, estoqueMinimo:0, custo:0, vidaUtilDias:0, criadoEm:nowTs()};
     delete base._id;
     var rec = Object.assign(base, {nome: g.existenteId ? base.nome : g.nome, categoria: g.categoria || base.categoria, atualizadoEm: nowTs()});
-    ['ca','validadeCA','fabricante','vidaUtilDias','unidade','estoqueMinimo','custo','caSituacao','caVerificadoEm'].forEach(function(f){ if(g[f] !== undefined && g[f] !== '') rec[f] = g[f]; });
+    ['ca','validadeCA','fabricante','grupo','vidaUtilDias','unidade','estoqueMinimo','custo','caSituacao','caVerificadoEm'].forEach(function(f){ if(g[f] !== undefined && g[f] !== '') rec[f] = g[f]; });
     var tams = (base.tamanhos || []).map(tamKey);
     g.tamanhos.forEach(function(t){ if(t !== 'UN' && tams.indexOf(t) === -1) tams.push(t); });
     rec.tamanhos = tams;
