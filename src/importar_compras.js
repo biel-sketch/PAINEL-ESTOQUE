@@ -15,7 +15,18 @@ formHandlers['importar-compras'] = function(){
      ['Prazo de pagamento','Não','28 dias'],['Data de entrega','Não','20/03/2026'],['Cotação 2 / Valor cotação 2','Não','FORNECEDOR Y / 610,00 (total)'],['Cotação 3 / Valor cotação 3','Não','FORNECEDOR Z / 580,00 (total)'],['Unidade','Não','UN, PAR, CX...']]
     .map(function(r){ return '<tr><td><b>'+r[0]+'</b></td><td>'+r[1]+'</td><td style="color:var(--text-dim)">'+esc(r[2])+'</td></tr>'; }).join('') + '</tbody></table>' +
     '<div class="modal-sub" style="margin-top:10px">Com as colunas de cotação 2 e 3 o painel calcula a economia de cada compra. Importar a mesma planilha de novo não duplica: compras já importadas são ignoradas.</div>' +
+    (function(){ var n = vals(DB.compras).filter(function(c){ return c.importada; }).length;
+      return n && can('admin') ? '<div class="action-box" style="border-color:var(--red-soft)"><h4>Importou errado?</h4><div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px">Existem <b>'+n+'</b> compra(s) importadas do histórico. Você pode removê-las e importar a planilha corrigida. Elas não mexeram no estoque, então nada mais muda.</div>' +
+        '<button class="btn btn-danger btn-sm" data-act="remover-importadas">Remover as '+n+' compras importadas</button></div>' : ''; })() +
     '<div class="modal-actions"><button class="btn" data-act="modelo-compras" style="margin-right:auto">Baixar planilha modelo</button><button class="btn btn-ghost" data-act="fechar">Cancelar</button><button class="btn btn-primary" data-act="escolher-planilha-compras">Escolher planilha</button></div>', 'wide');
+};
+formHandlers['remover-importadas'] = function(btn){
+  if(!can('admin')) return;
+  if(!confirmInline(btn, 'Clique de novo para remover')) return;
+  var ids = vals(DB.compras).filter(function(c){ return c.importada; }).map(function(c){ return c._id; }), p = {};
+  ids.forEach(function(id){ p['compras/' + id] = null; });
+  btn.disabled = true;
+  save(p, 'Compras importadas removidas', ids.length + ' compra(s)').then(function(){ closeModal(); toast(ids.length + ' compra(s) importada(s) removida(s). Já pode importar de novo.'); });
 };
 formHandlers['escolher-planilha-compras'] = function(){ importMode = 'compras'; $('#file-import').value = ''; $('#file-import').click(); };
 formHandlers['modelo-compras'] = function(){

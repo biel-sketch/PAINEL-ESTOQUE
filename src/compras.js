@@ -323,8 +323,18 @@ function formCompra(id, pidPrefill){
   }
 
   var left = '', right = '';
-  if(!novo && ['cotacao','reprovada','aguardando','aprovada'].indexOf(e) !== -1 && (can('comprar') || (c.solicitante === currentUser.name && e === 'cotacao')))
-    left = '<button class="btn btn-danger" data-act="cmp-cancelar" data-id="'+id+'" style="margin-right:auto">Cancelar solicitação</button>';
+  if(!novo && e !== 'cancelada' && (can('comprar') || can('aprovar') || (c.solicitante === currentUser.name && e === 'cotacao')))
+    left = '<button class="btn btn-danger" data-act="cmp-cancelar-abrir" data-id="'+id+'" style="margin-right:auto">Cancelar solicitação</button>';
+  if(!novo && e === 'cancelada' && (can('comprar') || can('admin')))
+    left = '<button class="btn" data-act="cmp-reativar" data-id="'+id+'" style="margin-right:auto">Reativar solicitação</button>';
+  if(!novo && e !== 'cancelada'){
+    var avisoEst = c.entradaEstoque || vals(c.pedidos).some(function(x){ return x && x.entradaEstoque; });
+    h += '<div class="action-box" id="c-cancel-box" style="display:none;border-color:var(--red-soft)"><h4 style="color:var(--red)">Cancelar '+cmpNumero(c)+'</h4>' +
+      (avisoEst ? '<div class="perm-note">Esta compra já deu entrada no estoque. Cancelar não desfaz essa entrada: se precisar, corrija o saldo em Estoque → Ajuste.</div>' : '') +
+      '<div class="modal-field"><label>Motivo do cancelamento</label><input id="c-cancel-motivo" placeholder="Ex.: comprado por engano, duplicada, não precisa mais"></div>' +
+      '<div class="modal-actions" style="margin-top:10px"><button class="btn btn-ghost" data-act="cmp-cancelar-fechar">Voltar</button><button class="btn btn-danger" data-act="cmp-cancelar" data-id="'+id+'">Confirmar cancelamento</button></div></div>';
+  }
+  if(!novo && e === 'cancelada') h += '<div class="action-box" style="border-color:var(--red-soft)"><h4 style="color:var(--red)">Cancelada'+(c.canceladoPor ? ' por ' + esc(c.canceladoPor) : '')+(c.canceladoEm ? ' em ' + fmtDT(c.canceladoEm) : '')+'</h4><div style="font-size:12.5px;color:var(--text-dim)">'+esc(c.motivoCancelamento || 'Sem motivo informado')+'</div></div>';
   if(novo) right = '<button class="btn btn-primary" data-act="cmp-salvar">Criar solicitação</button>';
   else if(edSol || edCot){
     right = '<button class="btn" data-act="cmp-salvar" data-id="'+id+'">Salvar</button>';
@@ -629,10 +639,23 @@ formHandlers['cmp-receber'] = function(btn){
   }).then(function(todos){ toast('Recebimento de ' + f.fornecedor + ' registrado' + (ops.length ? ' e saldo atualizado' : '') + '.'); if(todos) closeModal(); else formCompra(id); })
     .catch(function(e){ busy(btn, false); formError(e.message); });
 };
+formHandlers['cmp-cancelar-abrir'] = function(){ var b = $('#c-cancel-box'); b.style.display = ''; if(b.scrollIntoView) b.scrollIntoView({block:'center'}); $('#c-cancel-motivo').focus(); };
+formHandlers['cmp-cancelar-fechar'] = function(){ $('#c-cancel-box').style.display = 'none'; };
 formHandlers['cmp-cancelar'] = function(btn){
-  if(!confirmInline(btn, 'Confirmar cancelamento')) return;
-  var id = btn.dataset.id, p = {}; p['compras/' + id + '/compra'] = 'cancelada'; cmpHist(p, id, 'Solicitação cancelada');
-  save(p, 'Compra cancelada', cmpNumero(DB.compras[id])).then(function(){ closeModal(); toast('Solicitação cancelada.'); });
+  var id = btn.dataset.id, c = DB.compras[id], motivo = $('#c-cancel-motivo').value.trim();
+  if(!motivo) return formError('Escreva o motivo do cancelamento.');
+  var p = {}; p['compras/' + id + '/compraAntes'] = c.compra || 'pendente'; p['compras/' + id + '/compra'] = 'cancelada';
+  p['compras/' + id + '/motivoCancelamento'] = motivo; p['compras/' + id + '/canceladoPor'] = currentUser.name; p['compras/' + id + '/canceladoEm'] = nowTs();
+  cmpHist(p, id, 'Solicitação cancelada — ' + motivo);
+  busy(btn, true);
+  save(p, 'Compra cancelada', cmpNumero(c) + ' — ' + motivo).then(function(){ closeModal(); toast(cmpNumero(c) + ' cancelada.'); });
+};
+formHandlers['cmp-reativar'] = function(btn){
+  if(!confirmInline(btn, 'Confirmar reativação')) return;
+  var id = btn.dataset.id, c = DB.compras[id], volta = c.compraAntes && c.compraAntes !== 'cancelada' ? c.compraAntes : 'pendente';
+  var p = {}; p['compras/' + id + '/compra'] = volta; p['compras/' + id + '/motivoCancelamento'] = null; p['compras/' + id + '/canceladoPor'] = null; p['compras/' + id + '/canceladoEm'] = null;
+  cmpHist(p, id, 'Solicitação reativada');
+  save(p, 'Compra reativada', cmpNumero(c)).then(function(){ toast(cmpNumero(c) + ' reativada.'); formCompra(id); });
 };
 
 // Excel: uma linha por item, com os 3 preços e o fornecedor escolhido daquele item
