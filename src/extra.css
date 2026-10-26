@@ -187,3 +187,18 @@
   .q-item > span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .quote-card input.best{border-color:var(--teal);color:var(--teal);}
   .q-aprovar{justify-content:center;}
+  /* mapa de cotação */
+  .map-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .map-table th{padding:8px 10px;font-size:10.5px;}
+  .map-table td{padding:7px 10px;border-bottom:1px solid var(--line);}
+  .map-table tfoot td{border-top:1px solid var(--line-strong);border-bottom:none;color:var(--text-dim);font-size:12px;}
+  .map-cell{border-left:1px solid var(--line);white-space:nowrap;}
+  .map-cell label{display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--font-mono);font-size:12px;color:var(--text);}
+  .map-cell .sub{font-size:10.5px;}
+  .map-cell.best label{color:var(--teal);}
+  .map-cell.on{background:var(--teal-soft);box-shadow:inset 3px 0 0 var(--teal);}
+  .map-cell.vazio{color:var(--text-faint);text-align:center;}
+  .rec-forn{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:#0D1526;}
+  .rec-forn.done{color:var(--teal);font-size:12.5px;}
+  .rec-forn .rec-loc{padding:6px 10px;margin-right:auto;}
+  .ped-num, .ped-prev{width:100%;}
