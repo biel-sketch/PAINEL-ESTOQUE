@@ -439,7 +439,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-10-26-1452</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-10-27-1359</div>
     </div>
   </aside>
 
@@ -766,7 +766,10 @@ function localStore(){
     },
     stop: function(){},
     key: function(){ return '-L' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9); },
-    update: function(paths){ Object.keys(paths).forEach(function(p){ setPath(p, paths[p]); }); save(); scheduleRender(); return Promise.resolve(); },
+    update: function(paths){
+      var ks = Object.keys(paths).map(function(k){ return k.replace(/^\/+|\/+$/g, ''); }).sort();
+      for(var i = 1; i < ks.length; i++) if(ks[i].indexOf(ks[i-1] + '/') === 0) return Promise.reject(new Error('update failed: values argument contains a path /' + ks[i-1] + ' that is ancestor of another path /' + ks[i]));
+      Object.keys(paths).forEach(function(p){ setPath(p, paths[p]); }); save(); scheduleRender(); return Promise.resolve(); },
     txn: function(path, fn){
       var cur = getPath(path); var nv = fn(cur === undefined ? null : cur);
       if(nv === undefined) return Promise.resolve({committed:false, value:cur});
@@ -2750,7 +2753,13 @@ formHandlers['cmp-sel-q'] = function(el){
   cmpResumo();
 };
 
-function cmpHist(paths, id, acao){ paths['compras/' + id + '/historico/' + store.key()] = {ts: nowTs(), usuario: currentUser.name, acao: acao}; return paths; }
+function cmpHist(paths, id, acao){
+  var k = store.key(), h = {ts: nowTs(), usuario: currentUser.name, acao: acao}, base = paths['compras/' + id];
+  // Na criação a compra inteira já está em paths: o histórico vai dentro dela (o Firebase não aceita caminho pai e filho no mesmo update)
+  if(base && typeof base === 'object'){ base.historico = Object.assign({}, base.historico || {}); base.historico[k] = h; }
+  else paths['compras/' + id + '/historico/' + k] = h;
+  return paths;
+}
 function cmpDescSel(k){ return k.fornecedores.map(function(f){ return f.fornecedor + ' (' + f.itens.length + ' item(ns) ' + fmtR(f.subtotal) + ')'; }).join(' + '); }
 
 function cmpLerSolicitacao(){
