@@ -92,7 +92,7 @@ function initUI(){
   });
   // filtros: re-renderiza a tabela ao digitar/alterar
   ['est-busca','est-cat','est-local','est-zerados','est-minimo','mov-busca','mov-tipo','mov-de','mov-ate','prod-busca','prod-cat','prod-status',
-   'ent-busca','ent-empresa','ent-de','ent-ate','emp-busca','emp-empresa','emp-cliente','emp-status','rel-de','rel-ate','rel-empresa','rel-cat','cmp-busca','cmp-unidade','cmp-grupo'].forEach(function(id){
+   'ent-busca','ent-empresa','ent-de','ent-ate','emp-busca','emp-empresa','emp-cliente','emp-status','rel-de','rel-ate','rel-empresa','rel-cat','cmp-busca','cmp-unidade','cmp-grupo','val-local'].forEach(function(id){
     var el = $('#' + id); if(!el) return;
     el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' || el.type === 'date' ? 'change' : 'input', function(){ renderView(curView); });
   });
@@ -188,8 +188,8 @@ function produtosCAAlerta(){
   return vals(DB.produtos).filter(function(p){ if(p.ativo === false || !p.ca) return false; var s = caStatus(p); return s.cls === 'red' || s.cls === 'amber'; })
     .sort(function(a, b){ return (a.validadeCA || '') < (b.validadeCA || '') ? -1 : 1; });
 }
-function produtosAbaixoMinimo(){
-  return vals(DB.produtos).filter(function(p){ return p.ativo !== false && +p.estoqueMinimo > 0 && saldoProduto(p._id) < +p.estoqueMinimo; });
+function produtosAbaixoMinimo(loc){
+  return vals(DB.produtos).filter(function(p){ return p.ativo !== false && +p.estoqueMinimo > 0 && saldoProduto(p._id, loc) < +p.estoqueMinimo; });
 }
 function movsPeriodo(de, ate){
   return vals(DB.movimentos).filter(function(m){ return (!de || m.data >= de) && (!ate || m.data <= ate); });
@@ -404,15 +404,18 @@ function renderEmpregados(){
 // VALIDADE E CA
 // =====================================================================
 function renderValidade(){
-  var trocas = trocasPendentes(), cas = produtosCAAlerta(), minimo = produtosAbaixoMinimo();
+  var loc = valLocal(), trocas = trocasPendentes(), minimo = produtosAbaixoMinimo(loc);
+  var cas = produtosCAAlerta().filter(function(p){ return !loc || saldoProduto(p._id, loc) > 0; });
+  $('#val-toolbar').style.display = tabs.validade === 'trocas' ? 'none' : '';
+  $('#val-local-hint').textContent = !loc ? '' : (tabs.validade === 'minimo' ? 'Saldo deste local comparado com o estoque mínimo do produto.' : 'Só produtos com saldo em ' + nomeLocal(loc) + '.');
   var tv = trocas.filter(function(x){ return daysUntil(x.item.proximaTroca) < 0; }).length;
   var cv = cas.filter(function(p){ return caStatus(p).cls === 'red'; }).length;
   var cvv = cas.filter(function(p){ return caStatus(p).cls === 'amber'; }).length;
   $('#val-stats').innerHTML = tabs.validade === 'trocas'
     ? statCard('Trocas vencidas', tv, tv ? 'red' : '') + statCard('Trocas nos próximos ' + cfg('diasAlertaTroca', 15) + ' dias', trocas.length - tv, 'amber')
-    : (function(){ var rv = resumoValorCA(), vr = valorReposicao();
+    : (function(){ var rv = resumoValorCA(loc), vr = valorReposicao(loc);
         return statCard('CAs vencidos', cv, cv ? 'red' : '', '', 'validade:ca') + statCard('CAs vencendo', cvv, cvv ? 'amber' : '', 'próximos ' + cfg('diasAlertaCA', 60) + ' dias', 'validade:ca') +
-          statCard('Valor parado em CA vencido', fmtR(rv.vencido), rv.vencido ? 'red' : '', 'de ' + fmtR(rv.geral) + ' em estoque' + (rv.geral ? ' (' + (rv.vencido / rv.geral * 100).toLocaleString('pt-BR', {maximumFractionDigits:1}) + '%)' : ''), 'validade:ca') +
+          statCard('Valor parado em CA vencido', fmtR(rv.vencido), rv.vencido ? 'red' : '', 'de ' + fmtR(rv.geral) + (loc ? ' em ' + nomeLocal(loc) : ' em estoque') + (rv.geral ? ' (' + (rv.vencido / rv.geral * 100).toLocaleString('pt-BR', {maximumFractionDigits:1}) + '%)' : ''), 'validade:ca') +
           statCard('Abaixo do mínimo', minimo.length, minimo.length ? 'amber' : '', vr ? fmtR(vr) + ' para repor' : '', 'validade:minimo'); })();
   var t = tabs.validade, h = '';
   if(t === 'trocas'){
@@ -423,20 +426,20 @@ function renderValidade(){
         '<td><button class="btn btn-sm" data-act="nova-entrega" data-id="'+x.empregadoId+'"'+(can('entregar') ? '' : ' disabled')+'>Trocar</button></td></tr>';
     }).join('') + '</tbody></table>' : emptyState('Nenhuma troca vencida ou próxima.');
   } else if(t === 'ca'){
-    var all = vals(DB.produtos).filter(function(p){ return p.ativo !== false && p.ca; }).sort(function(a, b){ return (a.validadeCA || '9') < (b.validadeCA || '9') ? -1 : 1; });
+    var all = vals(DB.produtos).filter(function(p){ return p.ativo !== false && p.ca && (!loc || saldoProduto(p._id, loc) > 0); }).sort(function(a, b){ return (a.validadeCA || '9') < (b.validadeCA || '9') ? -1 : 1; });
     h = '<div class="panel-head"><span class="panel-title" id="caepi-meta" style="font-size:12px;font-weight:400;color:var(--text-dim)">Base oficial CAEPI</span><button class="btn btn-sm btn-primary" data-act="atualizar-cas"'+(can('produtos') ? '' : ' disabled')+'>Atualizar CAs pela base oficial</button></div>';
     caepiMetaInfo().then(function(m){ var el = $('#caepi-meta'); if(el) el.textContent = 'Base oficial CAEPI (Ministério do Trabalho) de ' + fmtD(m.atualizadoEm) + ' · ' + fmtN(m.total) + ' CAs'; }).catch(function(){ var el = $('#caepi-meta'); if(el) el.textContent = 'Base oficial CAEPI ainda não publicada no site'; });
-    var rvc = resumoValorCA(), totCA = all.reduce(function(t, p){ return t + valorEstoqueProduto(p); }, 0);
+    var rvc = resumoValorCA(loc), totCA = all.reduce(function(t, p){ return t + valorEstoqueProduto(p, loc); }, 0);
     h += all.length ? '<table><thead><tr><th>Produto</th><th>CA</th><th>Validade</th><th>Situação</th><th>Verificado em</th><th class="num">Saldo</th><th class="num">Valor em estoque</th><th></th></tr></thead><tbody>' + all.map(function(p){
-      var s = caStatus(p), v = valorEstoqueProduto(p), perdido = s.cls === 'red' && v > 0;
-      return '<tr><td>'+esc(p.nome)+'</td><td class="mono">'+esc(p.ca)+'</td><td class="mono">'+fmtD(p.validadeCA)+'</td><td><span class="pill '+s.cls+'">'+s.txt+'</span></td><td class="mono">'+fmtD(p.caVerificadoEm)+'</td><td class="num">'+fmtN(saldoProduto(p._id))+'</td>' +
+      var s = caStatus(p), v = valorEstoqueProduto(p, loc), perdido = s.cls === 'red' && v > 0;
+      return '<tr><td>'+esc(p.nome)+'</td><td class="mono">'+esc(p.ca)+'</td><td class="mono">'+fmtD(p.validadeCA)+'</td><td><span class="pill '+s.cls+'">'+s.txt+'</span></td><td class="mono">'+fmtD(p.caVerificadoEm)+'</td><td class="num">'+fmtN(saldoProduto(p._id, loc))+'</td>' +
         '<td class="num"'+(perdido ? ' style="color:var(--red);font-weight:600"' : '')+'>'+(+p.custo ? fmtR(v) : '<span class="sub" style="display:inline">sem custo</span>')+'</td>' +
         '<td style="white-space:nowrap"><a class="btn btn-sm" target="_blank" rel="noopener" href="https://consultaca.com/'+encodeURIComponent(p.ca)+'">Consultar CA</a> <button class="btn btn-sm" data-act="editar-produto" data-id="'+p._id+'"'+(can('produtos') ? '' : ' disabled')+'>Atualizar</button></td></tr>';
     }).join('') + '</tbody><tfoot><tr><td colspan="6" style="color:var(--red)"><b>Valor parado em CA vencido</b> ('+rvc.n+' produto(s))</td><td class="num" style="color:var(--red)"><b>'+fmtR(rvc.vencido)+'</b></td><td></td></tr>' +
       '<tr><td colspan="6"><b>Valor geral dos produtos com CA</b></td><td class="num"><b>'+fmtR(totCA)+'</b></td><td></td></tr>' +
-      '<tr><td colspan="6"><b>Valor geral do estoque</b> (todos os produtos)</td><td class="num"><b>'+fmtR(rvc.geral)+'</b></td><td></td></tr></tfoot></table>' : emptyState('Nenhum produto com CA cadastrado.');
+      '<tr><td colspan="6"><b>Valor geral do estoque</b> ('+(loc ? esc(nomeLocal(loc)) + ', ' : '')+'todos os produtos)</td><td class="num"><b>'+fmtR(rvc.geral)+'</b></td><td></td></tr></tfoot></table>' : emptyState(loc ? 'Nenhum produto com CA e saldo neste local.' : 'Nenhum produto com CA cadastrado.');
   } else {
-    h = renderTabelaMinimo();
+    h = renderTabelaMinimo(loc);
   }
   $('#val-table').innerHTML = h;
 }
