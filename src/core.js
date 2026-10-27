@@ -145,7 +145,10 @@ function localStore(){
     },
     stop: function(){},
     key: function(){ return '-L' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9); },
-    update: function(paths){ Object.keys(paths).forEach(function(p){ setPath(p, paths[p]); }); save(); scheduleRender(); return Promise.resolve(); },
+    update: function(paths){
+      var ks = Object.keys(paths).map(function(k){ return k.replace(/^\/+|\/+$/g, ''); }).sort();
+      for(var i = 1; i < ks.length; i++) if(ks[i].indexOf(ks[i-1] + '/') === 0) return Promise.reject(new Error('update failed: values argument contains a path /' + ks[i-1] + ' that is ancestor of another path /' + ks[i]));
+      Object.keys(paths).forEach(function(p){ setPath(p, paths[p]); }); save(); scheduleRender(); return Promise.resolve(); },
     txn: function(path, fn){
       var cur = getPath(path); var nv = fn(cur === undefined ? null : cur);
       if(nv === undefined) return Promise.resolve({committed:false, value:cur});

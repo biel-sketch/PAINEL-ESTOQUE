@@ -492,7 +492,13 @@ formHandlers['cmp-sel-q'] = function(el){
   cmpResumo();
 };
 
-function cmpHist(paths, id, acao){ paths['compras/' + id + '/historico/' + store.key()] = {ts: nowTs(), usuario: currentUser.name, acao: acao}; return paths; }
+function cmpHist(paths, id, acao){
+  var k = store.key(), h = {ts: nowTs(), usuario: currentUser.name, acao: acao}, base = paths['compras/' + id];
+  // Na criação a compra inteira já está em paths: o histórico vai dentro dela (o Firebase não aceita caminho pai e filho no mesmo update)
+  if(base && typeof base === 'object'){ base.historico = Object.assign({}, base.historico || {}); base.historico[k] = h; }
+  else paths['compras/' + id + '/historico/' + k] = h;
+  return paths;
+}
 function cmpDescSel(k){ return k.fornecedores.map(function(f){ return f.fornecedor + ' (' + f.itens.length + ' item(ns) ' + fmtR(f.subtotal) + ')'; }).join(' + '); }
 
 function cmpLerSolicitacao(){
