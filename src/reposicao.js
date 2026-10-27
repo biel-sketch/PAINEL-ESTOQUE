@@ -129,8 +129,9 @@ function resumoValorCA(loc){
   var venc = 0, geral = 0, nVenc = 0;
   vals(DB.produtos).forEach(function(p){
     if(p.ativo === false) return;
-    var v = valorEstoqueProduto(p, loc); geral += v;
-    if(p.ca && caStatus(p).cls === 'red' && saldoProduto(p._id, loc) > 0){ venc += v; nVenc++; }
+    geral += valorEstoqueProduto(p, loc);
+    var sv = saldoCAVencido(p, loc);
+    if(sv > 0){ venc += sv * (+p.custo || 0); nVenc++; }
   });
   return {vencido:venc, geral:geral, n:nVenc};
 }

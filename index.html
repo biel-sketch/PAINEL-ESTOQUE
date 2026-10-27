@@ -362,6 +362,8 @@
 #val-table tfoot td{border-top:1px solid var(--line-strong);border-bottom:none;font-size:12.5px;padding-top:9px;padding-bottom:9px;}
 #val-table tfoot tr + tr td{border-top:none;}
 .mc-qtd{width:80px;}
+.chip.chip-venc{background:rgba(239,68,68,.14);border-color:rgba(239,68,68,.55);color:#FCA5A5;}
+.chip.chip-venc b{color:#F87171;}
 </style>
 </head>
 <body>
@@ -442,7 +444,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-10-27-1434</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-10-27-1440</div>
     </div>
   </aside>
 
@@ -1073,15 +1075,7 @@ function nomeLocal(id){ return (DB.locais[id] || {}).nome || '—'; }
 function nomeCargo(id){ return (DB.cargos[id] || {}).nome || '—'; }
 function nomeProd(id){ return (DB.produtos[id] || {}).nome || '(produto removido)'; }
 
-function caStatus(p){
-  if(!p.ca) return {cls:'gray', txt:'Sem CA', d:null};
-  if(p.caSituacao && norm(p.caSituacao) !== 'valido' && norm(p.caSituacao) !== 'vencido') return {cls:'red', txt:'CA ' + p.caSituacao.toLowerCase(), d:null};
-  if(!p.validadeCA) return {cls:'amber', txt:'Sem validade', d:null};
-  var d = daysUntil(p.validadeCA), lim = +cfg('diasAlertaCA', 60);
-  if(d < 0) return {cls:'red', txt:'CA vencido', d:d};
-  if(d <= lim) return {cls:'amber', txt:'Vence em ' + d + 'd', d:d};
-  return {cls:'teal', txt:'Válido', d:d};
-}
+// caStatus(p) e os demais cálculos de CA ficam em cas.js (vários CAs por produto)
 function emptyState(msg){ return '<div class="empty-state"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg><div>'+msg+'</div></div>'; }
 function statCard(label, value, cls, sub, go){
   return '<div class="stat-card'+(go?' clickable':'')+'"'+(go?' data-go="'+go.split(':')[0]+'"'+(go.split(':')[1]?' data-tab="'+go.split(':')[1]+'"':''):'')+'><div class="stat-label">'+label+'</div><div class="stat-value '+(cls||'')+'">'+value+'</div>'+(sub?'<div class="stat-sub">'+sub+'</div>':'')+'</div>';
@@ -1111,9 +1105,10 @@ function trocasPendentes(){
   }).sort(function(a, b){ return a.item.proximaTroca < b.item.proximaTroca ? -1 : 1; });
 }
 function produtosCAAlerta(){
-  return vals(DB.produtos).filter(function(p){ if(p.ativo === false || !p.ca) return false; var s = caStatus(p); return s.cls === 'red' || s.cls === 'amber'; })
+  return vals(DB.produtos).filter(function(p){ if(p.ativo === false || !produtoCAs(p).length) return false; var s = caStatus(p); return s.cls === 'red' || s.cls === 'amber'; })
     .sort(function(a, b){ return (a.validadeCA || '') < (b.validadeCA || '') ? -1 : 1; });
 }
+function produtosCAVencidoComSaldo(){ return vals(DB.produtos).filter(function(p){ return p.ativo !== false && saldoCAVencido(p) > 0; }); }
 function produtosAbaixoMinimo(loc){
   return vals(DB.produtos).filter(function(p){ return p.ativo !== false && +p.estoqueMinimo > 0 && saldoProduto(p._id, loc) < +p.estoqueMinimo; });
 }
@@ -1122,7 +1117,7 @@ function movsPeriodo(de, ate){
 }
 function updateBadges(){
   var trocasVenc = trocasPendentes().filter(function(x){ return daysUntil(x.item.proximaTroca) < 0; }).length;
-  var caVenc = produtosCAAlerta().filter(function(p){ return caStatus(p).cls === 'red' && saldoProduto(p._id) > 0; }).length;
+  var caVenc = produtosCAVencidoComSaldo().length;
   var cmp = typeof comprasPendentesUsuario === 'function' ? comprasPendentesUsuario() : 0;
   $('#badge-entregas').textContent = trocasVenc || '';
   $('#badge-estoque').textContent = caVenc || '';
@@ -1136,7 +1131,7 @@ function renderDashboard(){
   var prods = vals(DB.produtos).filter(function(p){ return p.ativo !== false; });
   var unidades = 0, valor = 0;
   prods.forEach(function(p){ var s = saldoProduto(p._id); unidades += s; valor += s * (+p.custo || 0); });
-  var caVenc = produtosCAAlerta().filter(function(p){ return caStatus(p).cls === 'red' && saldoProduto(p._id) > 0; });
+  var caVenc = produtosCAVencidoComSaldo();
   var trocas = trocasPendentes(), trocasVenc = trocas.filter(function(x){ return daysUntil(x.item.proximaTroca) < 0; });
   var minimo = produtosAbaixoMinimo();
   var ini = today().slice(0, 8) + '01';
@@ -1151,10 +1146,10 @@ function renderDashboard(){
     statCard('CA vencido com saldo', fmtN(caVenc.length), caVenc.length ? 'red' : '', fmtN(minimo.length) + ' abaixo do mínimo', 'validade:ca');
 
   var al = [];
-  caVenc.slice(0, 4).forEach(function(p){ al.push(['red', esc(p.nome), 'CA ' + esc(p.ca) + ' vencido em ' + fmtD(p.validadeCA) + ' · ' + saldoProduto(p._id) + ' em estoque', 'validade:ca']); });
+  caVenc.slice(0, 4).forEach(function(p){ var vs = produtoCAs(p).filter(function(c){ return caStatusCA(c).cls === 'red'; }); al.push(['red', esc(p.nome), vs.map(function(c){ return 'CA ' + esc(c.ca) + ' vencido em ' + fmtD(c.validade); }).join(' · ') + ' · ' + saldoCAVencido(p) + ' em estoque', 'validade:ca']); });
   trocasVenc.slice(0, 4).forEach(function(x){ var e = DB.empregados[x.empregadoId] || {}; al.push(['red', esc(e.nome), esc(nomeProd(x.item.pid)) + ' — troca prevista ' + fmtD(x.item.proximaTroca), 'validade:trocas']); });
   minimo.slice(0, 4).forEach(function(p){ al.push(['amber', esc(p.nome), 'Saldo ' + saldoProduto(p._id) + ' · mínimo ' + p.estoqueMinimo, 'validade:minimo']); });
-  produtosCAAlerta().filter(function(p){ return caStatus(p).cls === 'amber'; }).slice(0, 3).forEach(function(p){ al.push(['amber', esc(p.nome), 'CA ' + esc(p.ca) + ' vence em ' + fmtD(p.validadeCA), 'validade:ca']); });
+  listaCAs().filter(function(x){ return x.st.cls === 'amber'; }).slice(0, 3).forEach(function(x){ al.push(['amber', esc(x.p.nome), 'CA ' + esc(x.c.ca) + ' vence em ' + fmtD(x.c.validade), 'validade:ca']); });
   var cmps = vals(DB.compras);
   var aguard = cmps.filter(function(c){ return cmpEtapa(c) === 'aguardando'; }).length;
   var aEmitir = cmps.filter(function(c){ return cmpEtapa(c) === 'aprovada'; }).length;
@@ -1188,7 +1183,7 @@ function renderEstoque(){
   var rows = vals(DB.produtos).filter(function(p){
     if(p.ativo === false) return false;
     if(cat && p.categoria !== cat) return false;
-    if(q && norm(p.nome + ' ' + (p.ca || '') + ' ' + (p.fabricante || '')).indexOf(q) === -1) return false;
+    if(q && norm(p.nome + ' ' + cvsTxt(p) + ' ' + (p.fabricante || '')).indexOf(q) === -1) return false;
     var s = saldoProduto(p._id, loc);
     if(!zer && s <= 0) return false;
     if(minOnly && !(+p.estoqueMinimo > 0 && s < +p.estoqueMinimo)) return false;
@@ -1200,11 +1195,16 @@ function renderEstoque(){
   if(!rows.length){ $('#est-table').innerHTML = emptyState(vals(DB.produtos).length ? 'Nenhum produto com esses filtros.' : 'Nenhum produto cadastrado. Cadastre em Produtos / EPIs e dê entrada no saldo.'); return; }
   $('#est-table').innerHTML = '<table><thead><tr><th>Produto</th><th>CA</th><th>Tamanhos / saldo</th><th class="num">Total</th><th class="num">Mínimo</th><th>Situação</th></tr></thead><tbody>' +
     rows.map(function(p){
-      var s = saldoProduto(p._id, loc), ca = caStatus(p);
-      var chips = tamanhosProduto(p._id).map(function(k){ var v = saldoDe(p._id, k, loc); return (v || zer) ? '<span class="chip'+(v?'':' zero')+'">'+esc(tamLabel(k) === '—' ? 'UN' : k)+' <b>'+v+'</b></span>' : ''; }).join('');
-      var sit = +p.estoqueMinimo > 0 && s < +p.estoqueMinimo ? '<span class="pill amber">Abaixo do mínimo</span>' : (s <= 0 ? '<span class="pill gray">Zerado</span>' : '<span class="pill teal">OK</span>');
+      var s = saldoProduto(p._id, loc), cas = produtoCAs(p), sv = saldoCAVencido(p, loc);
+      var chips = tamanhosProduto(p._id).map(function(k){ var v = saldoDe(p._id, k, loc), venc = tamCAVencido(p, k); return (v || zer) ? '<span class="chip'+(v?'':' zero')+(venc?' chip-venc':'')+'"'+(venc ? ' title="CA '+esc((caDoTamanho(p, k) || {}).ca)+' vencido"' : '')+'>'+esc(tamLabel(k) === '—' ? 'UN' : k)+' <b>'+v+'</b></span>' : ''; }).join('');
+      var pills = [];
+      if(sv > 0) pills.push('<span class="pill red">CA vencido' + (sv < s ? ' (' + fmtN(sv) + ' un)' : '') + '</span>');
+      if(+p.estoqueMinimo > 0 && s < +p.estoqueMinimo) pills.push('<span class="pill amber">Abaixo do mínimo</span>');
+      if(!pills.length) pills.push(s <= 0 ? '<span class="pill gray">Zerado</span>' : '<span class="pill teal">OK</span>');
+      var sit = '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">' + pills.join('') + '</div>';
+      var caCol = cas.length ? cas.map(function(c){ var st = caStatusCA(c); return '<div style="margin-bottom:3px"><span class="mono">'+esc(c.ca)+'</span>'+(cas.length > 1 && (c.tamanhos || []).length ? ' <span class="sub" style="display:inline">'+esc(tamsTxt(c.tamanhos))+'</span>' : '')+'<span class="sub"><span class="pill '+st.cls+'" style="padding:1px 7px;font-size:10.5px">'+st.txt+'</span></span></div>'; }).join('') : '<span class="mono">—</span>';
       return '<tr class="row-clickable" data-act="ver-produto" data-id="'+p._id+'"><td>'+esc(p.nome)+'<span class="sub">'+esc(p.categoria || '')+(p.fabricante ? ' · ' + esc(p.fabricante) : '')+'</span></td>' +
-        '<td>'+(p.ca ? '<span class="mono">'+esc(p.ca)+'</span><span class="sub"><span class="pill '+ca.cls+'" style="padding:1px 7px;font-size:10.5px">'+ca.txt+'</span></span>' : '<span class="mono">—</span>')+'</td>' +
+        '<td>'+caCol+'</td>' +
         '<td><div class="chips">'+chips+'</div></td><td class="num">'+fmtN(s)+'</td><td class="num">'+(p.estoqueMinimo ? fmtN(p.estoqueMinimo) : '—')+'</td><td>'+sit+'</td></tr>';
     }).join('') + '</tbody></table>';
 }
@@ -1251,7 +1251,7 @@ function renderProdutos(){
     if(st === 'ativos' && p.ativo === false) return false;
     if(st === 'inativos' && p.ativo !== false) return false;
     if(cat && p.categoria !== cat) return false;
-    if(q && norm([p.nome, p.ca, p.fabricante, p.codRSData].join(' ')).indexOf(q) === -1) return false;
+    if(q && norm([p.nome, cvsTxt(p), p.fabricante, p.codRSData].join(' ')).indexOf(q) === -1) return false;
     return true;
   }).sort(byName);
   if(!rows.length){ $('#prod-table').innerHTML = emptyState('Nenhum produto encontrado.'); return; }
@@ -1259,7 +1259,7 @@ function renderProdutos(){
     rows.map(function(p){
       var ca = caStatus(p);
       return '<tr class="row-clickable" data-act="editar-produto" data-id="'+p._id+'"><td>'+esc(p.nome)+(p.ativo === false ? ' <span class="pill gray">Inativo</span>' : '')+(p.fabricante ? '<span class="sub">'+esc(p.fabricante)+'</span>' : '')+'</td><td>'+esc(p.categoria || '')+(p.grupo ? '<span class="sub">'+esc(p.grupo)+'</span>' : '')+'</td>' +
-        '<td class="mono">'+esc(p.ca || '—')+'</td><td>'+(p.ca ? fmtD(p.validadeCA) + ' <span class="pill '+ca.cls+'" style="padding:1px 7px;font-size:10.5px">'+ca.txt+'</span>' : '—')+'</td>' +
+        '<td class="mono">'+esc(cvsTxt(p) || '—')+'</td><td>'+(produtoCAs(p).length ? produtoCAs(p).map(function(c){ var st = caStatusCA(c); return '<div>'+fmtD(c.validade) + ' <span class="pill '+st.cls+'" style="padding:1px 7px;font-size:10.5px">'+st.txt+'</span></div>'; }).join('') : '—')+'</td>' +
         '<td>'+vidaUtilTxt(p.vidaUtilDias)+'</td><td><div class="chips">'+(p.tamanhos || []).map(function(t){ return '<span class="chip">'+esc(t)+'</span>'; }).join('')+'</div></td>' +
         '<td class="num">'+(p.estoqueMinimo || '—')+'</td><td class="num">'+(p.custo ? fmtR(p.custo) : '—')+'</td><td class="num">'+fmtN(saldoProduto(p._id))+'</td></tr>';
     }).join('') + '</tbody></table><div class="tbl-foot">'+rows.length+' produtos</div>';
@@ -1331,12 +1331,12 @@ function renderEmpregados(){
 // =====================================================================
 function renderValidade(){
   var loc = valLocal(), trocas = trocasPendentes(), minimo = produtosAbaixoMinimo(loc);
-  var cas = produtosCAAlerta().filter(function(p){ return !loc || saldoProduto(p._id, loc) > 0; });
+  var listaC = listaCAs(loc);
   $('#val-toolbar').style.display = tabs.validade === 'trocas' ? 'none' : '';
-  $('#val-local-hint').textContent = !loc ? '' : (tabs.validade === 'minimo' ? 'Saldo deste local comparado com o estoque mínimo do produto.' : 'Só produtos com saldo em ' + nomeLocal(loc) + '.');
+  $('#val-local-hint').textContent = !loc ? '' : (tabs.validade === 'minimo' ? 'Saldo deste local comparado com o estoque mínimo do produto.' : 'Só CAs com saldo em ' + nomeLocal(loc) + '.');
   var tv = trocas.filter(function(x){ return daysUntil(x.item.proximaTroca) < 0; }).length;
-  var cv = cas.filter(function(p){ return caStatus(p).cls === 'red'; }).length;
-  var cvv = cas.filter(function(p){ return caStatus(p).cls === 'amber'; }).length;
+  var cv = listaC.filter(function(x){ return x.st.cls === 'red'; }).length;
+  var cvv = listaC.filter(function(x){ return x.st.cls === 'amber'; }).length;
   $('#val-stats').innerHTML = tabs.validade === 'trocas'
     ? statCard('Trocas vencidas', tv, tv ? 'red' : '') + statCard('Trocas nos próximos ' + cfg('diasAlertaTroca', 15) + ' dias', trocas.length - tv, 'amber')
     : (function(){ var rv = resumoValorCA(loc), vr = valorReposicao(loc);
@@ -1352,18 +1352,19 @@ function renderValidade(){
         '<td><button class="btn btn-sm" data-act="nova-entrega" data-id="'+x.empregadoId+'"'+(can('entregar') ? '' : ' disabled')+'>Trocar</button></td></tr>';
     }).join('') + '</tbody></table>' : emptyState('Nenhuma troca vencida ou próxima.');
   } else if(t === 'ca'){
-    var all = vals(DB.produtos).filter(function(p){ return p.ativo !== false && p.ca && (!loc || saldoProduto(p._id, loc) > 0); }).sort(function(a, b){ return (a.validadeCA || '9') < (b.validadeCA || '9') ? -1 : 1; });
+    var all = listaC;
     h = '<div class="panel-head"><span class="panel-title" id="caepi-meta" style="font-size:12px;font-weight:400;color:var(--text-dim)">Base oficial CAEPI</span><button class="btn btn-sm btn-primary" data-act="atualizar-cas"'+(can('produtos') ? '' : ' disabled')+'>Atualizar CAs pela base oficial</button></div>';
     caepiMetaInfo().then(function(m){ var el = $('#caepi-meta'); if(el) el.textContent = 'Base oficial CAEPI (Ministério do Trabalho) de ' + fmtD(m.atualizadoEm) + ' · ' + fmtN(m.total) + ' CAs'; }).catch(function(){ var el = $('#caepi-meta'); if(el) el.textContent = 'Base oficial CAEPI ainda não publicada no site'; });
-    var rvc = resumoValorCA(loc), totCA = all.reduce(function(t, p){ return t + valorEstoqueProduto(p, loc); }, 0);
-    h += all.length ? '<table><thead><tr><th>Produto</th><th>CA</th><th>Validade</th><th>Situação</th><th>Verificado em</th><th class="num">Saldo</th><th class="num">Valor em estoque</th><th></th></tr></thead><tbody>' + all.map(function(p){
-      var s = caStatus(p), v = valorEstoqueProduto(p, loc), perdido = s.cls === 'red' && v > 0;
-      return '<tr><td>'+esc(p.nome)+'</td><td class="mono">'+esc(p.ca)+'</td><td class="mono">'+fmtD(p.validadeCA)+'</td><td><span class="pill '+s.cls+'">'+s.txt+'</span></td><td class="mono">'+fmtD(p.caVerificadoEm)+'</td><td class="num">'+fmtN(saldoProduto(p._id, loc))+'</td>' +
-        '<td class="num"'+(perdido ? ' style="color:var(--red);font-weight:600"' : '')+'>'+(+p.custo ? fmtR(v) : '<span class="sub" style="display:inline">sem custo</span>')+'</td>' +
-        '<td style="white-space:nowrap"><a class="btn btn-sm" target="_blank" rel="noopener" href="https://consultaca.com/'+encodeURIComponent(p.ca)+'">Consultar CA</a> <button class="btn btn-sm" data-act="editar-produto" data-id="'+p._id+'"'+(can('produtos') ? '' : ' disabled')+'>Atualizar</button></td></tr>';
-    }).join('') + '</tbody><tfoot><tr><td colspan="6" style="color:var(--red)"><b>Valor parado em CA vencido</b> ('+rvc.n+' produto(s))</td><td class="num" style="color:var(--red)"><b>'+fmtR(rvc.vencido)+'</b></td><td></td></tr>' +
-      '<tr><td colspan="6"><b>Valor geral dos produtos com CA</b></td><td class="num"><b>'+fmtR(totCA)+'</b></td><td></td></tr>' +
-      '<tr><td colspan="6"><b>Valor geral do estoque</b> ('+(loc ? esc(nomeLocal(loc)) + ', ' : '')+'todos os produtos)</td><td class="num"><b>'+fmtR(rvc.geral)+'</b></td><td></td></tr></tfoot></table>' : emptyState(loc ? 'Nenhum produto com CA e saldo neste local.' : 'Nenhum produto com CA cadastrado.');
+    var rvc = resumoValorCA(loc), totCA = all.reduce(function(t, x){ return t + x.valor; }, 0);
+    h += all.length ? '<table><thead><tr><th>Produto</th><th>CA</th><th>Tamanhos</th><th>Validade</th><th>Situação</th><th>Verificado em</th><th class="num">Saldo</th><th class="num">Valor em estoque</th><th></th></tr></thead><tbody>' + all.map(function(x){
+      var p = x.p, c = x.c, s = x.st, perdido = s.cls === 'red' && x.valor > 0;
+      var tt = x.varios || (c.tamanhos || []).length ? x.tams.map(function(k){ var v = saldoDe(p._id, k, loc); return '<span class="chip'+(v ? '' : ' zero')+(s.cls === 'red' ? ' chip-venc' : '')+'">'+esc(tamLabel(k) === '—' ? 'UN' : k)+' <b>'+v+'</b></span>'; }).join('') : '<span class="sub" style="display:inline">todos</span>';
+      return '<tr><td>'+esc(p.nome)+(x.varios ? '<span class="sub">'+produtoCAs(p).length+' CAs neste produto</span>' : '')+'</td><td class="mono">'+esc(c.ca)+'</td><td><div class="chips">'+tt+'</div></td><td class="mono">'+fmtD(c.validade)+'</td><td><span class="pill '+s.cls+'">'+s.txt+'</span></td><td class="mono">'+fmtD(c.verificadoEm)+'</td><td class="num">'+fmtN(x.saldo)+'</td>' +
+        '<td class="num"'+(perdido ? ' style="color:var(--red);font-weight:600"' : '')+'>'+(+p.custo ? fmtR(x.valor) : '<span class="sub" style="display:inline">sem custo</span>')+'</td>' +
+        '<td style="white-space:nowrap"><a class="btn btn-sm" target="_blank" rel="noopener" href="https://consultaca.com/'+encodeURIComponent(c.ca)+'">Consultar CA</a> <button class="btn btn-sm" data-act="editar-produto" data-id="'+p._id+'"'+(can('produtos') ? '' : ' disabled')+'>Atualizar</button></td></tr>';
+    }).join('') + '</tbody><tfoot><tr><td colspan="7" style="color:var(--red)"><b>Valor parado em CA vencido</b> ('+rvc.n+' produto(s))</td><td class="num" style="color:var(--red)"><b>'+fmtR(rvc.vencido)+'</b></td><td></td></tr>' +
+      '<tr><td colspan="7"><b>Valor geral dos produtos com CA</b></td><td class="num"><b>'+fmtR(totCA)+'</b></td><td></td></tr>' +
+      '<tr><td colspan="7"><b>Valor geral do estoque</b> ('+(loc ? esc(nomeLocal(loc)) + ', ' : '')+'todos os produtos)</td><td class="num"><b>'+fmtR(rvc.geral)+'</b></td><td></td></tr></tfoot></table>' : emptyState(loc ? 'Nenhum produto com CA e saldo neste local.' : 'Nenhum produto com CA cadastrado.');
   } else {
     h = renderTabelaMinimo(loc);
   }
@@ -1419,7 +1420,7 @@ function renderRelatorios(){
     var g = {};
     movs.forEach(function(m){ var k = m.pid + '|' + m.tk; g[k] = g[k] || {pid:m.pid, tk:m.tk, qtd:0, valor:0, entregas:0}; g[k].qtd += +m.qtd; g[k].valor += (+m.qtd) * (+m.custoUnit || +(DB.produtos[m.pid] || {}).custo || 0); g[k].entregas++; });
     var rows = vals(g).sort(function(a, b){ return b.qtd - a.qtd; });
-    relData = {nome:'consumo', rows: rows.map(function(r){ var p = DB.produtos[r.pid] || {}; return {Produto:p.nome, Categoria:p.categoria, CA:p.ca || '', Tamanho:tamLabel(r.tk), Quantidade:r.qtd, Valor:Math.round(r.valor * 100) / 100}; })};
+    relData = {nome:'consumo', rows: rows.map(function(r){ var p = DB.produtos[r.pid] || {}; return {Produto:p.nome, Categoria:p.categoria, CA:(caDoTamanho(p, r.tk) || {}).ca || '', Tamanho:tamLabel(r.tk), Quantidade:r.qtd, Valor:Math.round(r.valor * 100) / 100}; })};
     var tq = rows.reduce(function(s, r){ return s + r.qtd; }, 0), tv = rows.reduce(function(s, r){ return s + r.valor; }, 0);
     h = '<div class="stats">' + statCard('Itens entregues', fmtN(tq), 'teal') + statCard('Valor consumido', fmtR(tv)) + statCard('Produtos diferentes', fmtN(Object.keys(rows.reduce(function(o, r){ o[r.pid] = 1; return o; }, {})).length)) + statCard('Período', fmtD(de) + ' a ' + fmtD(ate)) + '</div>';
     h += '<div class="panel"><div class="table-wrap">' + (rows.length ? '<table><thead><tr><th>Produto</th><th>Categoria</th><th>Tam.</th><th class="num">Quantidade</th><th class="num">Valor</th></tr></thead><tbody>' + rows.map(function(r){
@@ -1516,7 +1517,7 @@ function handleAction(a, el){
     case 'importar-empregados': importMode = 'empregados'; $('#file-import').value = ''; $('#file-import').click(); break;
     case 'export-estoque': exportEstoque(); break;
     case 'export-movs': exportXlsx('movimentacoes', filtroMovs().map(function(m){ var e = DB.empregados[m.empregadoId] || {}; var p = DB.produtos[m.pid] || {}; return {Data:fmtD(m.data), Tipo:(MOV_TIPOS[m.tipo] || {}).label || m.tipo, Produto:p.nome, CA:p.ca || '', Tamanho:tamLabel(m.tk), Quantidade:m.qtd * (((MOV_TIPOS[m.tipo] || {}).sinal) === -1 ? -1 : 1), 'Afeta saldo':((MOV_TIPOS[m.tipo] || {}).sinal) === 0 ? 'Não' : 'Sim', Local:nomeLocal(m.loc), Empregado:e.nome || '', Fornecedor:m.fornecedor || '', NF:m.doc || '', Motivo:m.motivo || '', 'Custo unit.':m.custoUnit || '', Usuario:m.usuario}; })); break;
-    case 'export-produtos': exportXlsx('produtos', vals(DB.produtos).sort(byName).map(function(p){ return {Produto:p.nome, Categoria:p.categoria, CA:p.ca || '', 'Validade CA':fmtD(p.validadeCA), Fabricante:p.fabricante || '', 'Vida util (dias)':p.vidaUtilDias || '', Tamanhos:(p.tamanhos || []).join(', '), 'Estoque minimo':p.estoqueMinimo || 0, Custo:p.custo || 0, Saldo:saldoProduto(p._id), Ativo:p.ativo === false ? 'Não' : 'Sim'}; })); break;
+    case 'export-produtos': exportXlsx('produtos', vals(DB.produtos).sort(byName).map(function(p){ return {Produto:p.nome, Categoria:p.categoria, CA:cvsTxt(p), 'Validade CA':produtoCAs(p).map(function(c){ return fmtD(c.validade); }).join(' / '), 'Tamanhos por CA':produtoCAs(p).length > 1 ? produtoCAs(p).map(function(c){ return c.ca + ': ' + tamsTxt(tamanhosDoCA(p, c)); }).join(' | ') : '', Fabricante:p.fabricante || '', 'Vida util (dias)':p.vidaUtilDias || '', Tamanhos:(p.tamanhos || []).join(', '), 'Estoque minimo':p.estoqueMinimo || 0, Custo:p.custo || 0, Saldo:saldoProduto(p._id), Ativo:p.ativo === false ? 'Não' : 'Sim'}; })); break;
     case 'export-entregas': exportEntregas(); break;
     case 'export-empregados': exportXlsx('empregados', vals(DB.empregados).sort(byName).map(function(e){ var t = e.tamanhos || {}; return {Nome:e.nome, CPF:e.cpf || '', Empresa:nomeEmpresa(e.empresaId), Cliente:e.cliente || '', Cargo:nomeCargo(e.cargoId), Admissao:fmtD(e.admissao), Camisa:t.camisa || '', Calca:t.calca || '', Calcado:t.calcado || '', Luva:t.luva || '', Situacao:e.ativo === false ? 'Desligado' : 'Ativo', 'Itens em posse':itensEmPosse(e._id).reduce(function(s, x){ return s + x.aberto; }, 0)}; })); break;
     case 'rel-export': if(relData && relData.rows) exportXlsx(relData.nome, relData.rows); else toast('Nada para exportar nesta aba.', 'err'); break;
@@ -1707,37 +1708,38 @@ function formProduto(pid){
     field('Nome', '<input id="p-nome" value="'+esc(p.nome || '')+'">', 'full') +
     field('Categoria', '<select id="p-cat">'+optList([['EPI','EPI'],['Uniforme','Uniforme'],['Material','Material']], p.categoria)+'</select>') +
     field('Unidade', '<select id="p-un">'+optList(unidadesOpts(p.unidade), (p.unidade || 'UN').toUpperCase())+'</select>') +
-    field('Nº do CA', '<div style="display:flex;gap:8px"><input id="p-ca" value="'+esc(p.ca || '')+'" placeholder="Só para EPI" inputmode="numeric"><button class="btn btn-sm" data-act="consultar-ca" type="button">Consultar</button></div><input type="hidden" id="p-ca-sit" value="'+esc(p.caSituacao || '')+'">', '', 'Ao sair do campo, a validade é buscada na base oficial.') +
-    field('Validade do CA', '<input type="date" id="p-val" value="'+esc(p.validadeCA || '')+'">') +
-    '<div class="full" id="p-ca-info" style="grid-column:1/-1"></div>' +
     field('Grupo', '<input id="p-grupo" list="dl-grupos-prod" value="'+esc(p.grupo || '')+'" placeholder="Ex.: Luvas, Calçados, Uniforme">', '', 'Usado para agrupar as compras.') +
     field('Fabricante / marca', '<input id="p-fab" value="'+esc(p.fabricante || '')+'">') +
     '<datalist id="dl-grupos-prod">'+cmpGruposLista().map(function(g){ return '<option value="'+esc(g)+'">'; }).join('')+'</datalist>' +
     field('Vida útil (troca)', '<div style="display:flex;gap:8px"><input type="number" id="p-vu" min="0" value="'+vuN+'" style="width:90px"><select id="p-vuun">'+optList([['1','dias'],['30','meses'],['365','anos']], String(vuUn))+'</select></div>', '', 'Usada para calcular a próxima troca.') +
     field('Estoque mínimo', '<input type="number" id="p-min" min="0" value="'+(p.estoqueMinimo || 0)+'">', '', 'Gera alerta quando o saldo total ficar abaixo.') +
     field('Tamanhos', '<input id="p-tams" value="'+esc((p.tamanhos || []).join(', '))+'" placeholder="Ex.: P, M, G, GG  ou  36, 38, 40">', 'full', 'Separe por vírgula. Deixe vazio para produto de tamanho único.') +
+    caEditorHtml(p) +
     field('Custo médio (R$)', '<input id="p-custo" value="'+(p.custo ? String(p.custo).replace('.', ',') : '')+'">', '', 'Atualizado automaticamente nas entradas com custo.') +
     field('Situação', '<select id="p-ativo">'+optList([['1','Ativo'],['0','Inativo']], p.ativo === false ? '0' : '1')+'</select>') +
     '</div>' + modalActions('Salvar', 'salvar-produto', pid && can('admin') && !saldoProduto(pid) && !vals(DB.movimentos).some(function(m){ return m.pid === pid; }) ? '<button class="btn btn-danger" data-act="excluir-produto" data-id="'+pid+'" style="margin-right:auto">Excluir</button>' : '') + (pid ? '<input type="hidden" id="p-id" value="'+pid+'">' : ''));
   wireCAProduto();
 }
 formHandlers['salvar-produto'] = function(btn){
-  if(($('#p-ca').value.trim()) !== ((DB.produtos[($('#p-id') || {}).value] || {}).ca || '') && !$('#p-ca-info').innerHTML) $('#p-ca-sit').value = '';
   var pid = ($('#p-id') || {}).value, nome = $('#p-nome').value.trim();
   if(!nome) return formError('Informe o nome.');
   var dup = vals(DB.produtos).find(function(x){ return x._id !== pid && norm(x.nome) === norm(nome); });
   if(dup) return formError('Já existe um produto com esse nome.');
   var tams = $('#p-tams').value.split(',').map(function(t){ return tamKey(t); }).filter(function(t){ return t && t !== 'UN'; });
+  var lc = lerCAsForm(tams); if(lc.erro) return formError(lc.erro);
   var rec = Object.assign({}, pid ? DB.produtos[pid] : {}, {
-    nome: nome, categoria: $('#p-cat').value, unidade: $('#p-un').value || 'UN', ca: $('#p-ca').value.trim(), validadeCA: $('#p-val').value,
+    nome: nome, categoria: $('#p-cat').value, unidade: $('#p-un').value || 'UN', cas: lc.cas,
     fabricante: $('#p-fab').value.trim(), grupo: $('#p-grupo').value.trim(), vidaUtilDias: Math.round(num($('#p-vu').value) * +$('#p-vuun').value), estoqueMinimo: Math.floor(num($('#p-min').value)),
-    tamanhos: tams, custo: num($('#p-custo').value), ativo: $('#p-ativo').value === '1', atualizadoEm: nowTs(),
-    caSituacao: $('#p-ca').value.trim() ? $('#p-ca-sit').value : ''
+    tamanhos: tams, custo: num($('#p-custo').value), ativo: $('#p-ativo').value === '1', atualizadoEm: nowTs()
   });
+  espelharCAs(rec);
   delete rec._id;
   var id = pid || store.key(), paths = {}; paths['produtos/' + id] = rec;
   busy(btn, true);
-  save(paths, pid ? 'Produto alterado' : 'Produto criado', nome).then(function(){ closeModal(); toast('Produto salvo.'); }).catch(function(e){ busy(btn, false); formError(e.message); });
+  // CA sem validade: tenta a base oficial antes de salvar
+  Promise.all((rec.cas || []).filter(function(c){ return !c.validade; }).map(function(c){
+    return consultaCA(c.ca).then(function(r){ if(r){ c.validade = r.v || ''; c.situacao = r.s || ''; c.verificadoEm = today(); } }).catch(function(){});
+  })).then(function(){ espelharCAs(rec); return save(paths, pid ? 'Produto alterado' : 'Produto criado', nome); }).then(function(){ closeModal(); toast('Produto salvo.'); }).catch(function(e){ busy(btn, false); formError(e.message); });
 };
 formHandlers['excluir-produto'] = function(el){
   var pid = el.dataset.id; if(!confirmInline(el, 'Confirmar exclusão')) return;
@@ -1755,11 +1757,11 @@ function verProduto(pid){
   var p = DB.produtos[pid]; if(!p) return;
   var locs = vals(DB.locais).sort(byName), tams = tamanhosProduto(pid), ca = caStatus(p);
   var grid = '<table class="items-table"><thead><tr><th>Tamanho</th>' + locs.map(function(l){ return '<th class="num">'+esc(l.nome)+'</th>'; }).join('') + '<th class="num">Total</th></tr></thead><tbody>' +
-    tams.map(function(k){ return '<tr><td class="mono">'+esc(k === 'UN' ? 'Único' : k)+'</td>' + locs.map(function(l){ return '<td class="num">'+saldoDe(pid, k, l._id)+'</td>'; }).join('') + '<td class="num"><b>'+saldoDe(pid, k)+'</b></td></tr>'; }).join('') + '</tbody></table>';
+    tams.map(function(k){ var cv = tamCAVencido(p, k); return '<tr'+(cv ? ' style="color:var(--red)"' : '')+'><td class="mono">'+esc(k === 'UN' ? 'Único' : k)+(cv ? ' <span class="pill red" style="padding:0 6px;font-size:10px">CA '+esc(caDoTamanho(p, k).ca)+' vencido</span>' : '')+'</td>' + locs.map(function(l){ return '<td class="num">'+saldoDe(pid, k, l._id)+'</td>'; }).join('') + '<td class="num"><b>'+saldoDe(pid, k)+'</b></td></tr>'; }).join('') + '</tbody></table>';
   var movs = vals(DB.movimentos).filter(function(m){ return m.pid === pid; }).sort(function(a, b){ return b.ts - a.ts; }).slice(0, 15);
   openModal('<div class="modal-title">'+esc(p.nome)+'</div><div class="info-grid">' +
-    '<div><div class="lbl">Categoria</div>'+esc(p.categoria)+'</div><div><div class="lbl">CA</div>'+esc(p.ca || '—')+(p.ca ? ' <span class="pill '+ca.cls+'" style="padding:1px 7px;font-size:10.5px">'+ca.txt+'</span>' : '')+'</div>' +
-    '<div><div class="lbl">Validade CA</div>'+fmtD(p.validadeCA)+'</div><div><div class="lbl">Vida útil</div>'+vidaUtilTxt(p.vidaUtilDias)+'</div>' +
+    '<div><div class="lbl">Categoria</div>'+esc(p.categoria)+'</div><div><div class="lbl">CA</div>'+(produtoCAs(p).length ? produtoCAs(p).map(function(c){ var st = caStatusCA(c); return '<div>'+esc(c.ca)+' <span class="pill '+st.cls+'" style="padding:1px 7px;font-size:10.5px">'+st.txt+'</span>'+(produtoCAs(p).length > 1 ? ' <span style="color:var(--text-faint);font-size:11.5px">'+esc(tamsTxt(tamanhosDoCA(p, c)))+'</span>' : '')+'</div>'; }).join('') : '—')+'</div>' +
+    '<div><div class="lbl">Validade CA</div>'+(produtoCAs(p).map(function(c){ return '<div>'+fmtD(c.validade)+'</div>'; }).join('') || '—')+'</div><div><div class="lbl">Vida útil</div>'+vidaUtilTxt(p.vidaUtilDias)+'</div>' +
     '<div><div class="lbl">Saldo total</div>'+fmtN(saldoProduto(pid))+'</div><div><div class="lbl">Mínimo</div>'+(p.estoqueMinimo || '—')+'</div><div><div class="lbl">Custo médio</div>'+(p.custo ? fmtR(p.custo) : '—')+'</div><div><div class="lbl">Fabricante</div>'+esc(p.fabricante || '—')+'</div></div>' +
     '<div class="section-label">Saldo por tamanho e local</div>' + grid +
     '<div class="section-label">Últimas movimentações</div>' + (movs.length ? '<div class="table-wrap">' + movTable(movs, true) + '</div>' : '<div style="color:var(--text-faint);font-size:12.5px">Nenhuma.</div>') +
@@ -1837,7 +1839,7 @@ function refreshItemEntrega(tr, autoTam){
   var avisos = [], erro = '';
   var s = saldoDe(pid, sel.value, loc), q = Math.floor(num($('.it-qtd', tr).value));
   if(q > s) erro = 'Saldo insuficiente neste local (' + s + ').';
-  var ca = caStatus(p); if(p.ca && ca.cls === 'red') avisos.push('CA vencido em ' + fmtD(p.validadeCA) + '.');
+  var caT = caDoTamanho(p, sel.value || 'UN'); if(caT && caStatusCA(caT).cls === 'red') avisos.push('CA ' + caT.ca + ' vencido em ' + fmtD(caT.validade) + '.');
   var empId = findEmpByLabel($('#e-emp').value);
   if(empId){
     var antes = itensEmPosse(empId).find(function(x){ return x.item.pid === pid; });
@@ -1865,8 +1867,8 @@ formHandlers['salvar-entrega'] = function(btn){
     var lab = $('.it-prod', tr).value.trim(); if(!lab) return;
     var pid = findProdByLabel(lab); if(!pid){ bad = 'Produto não encontrado: ' + lab; return; }
     var q = Math.floor(num($('.it-qtd', tr).value)); if(q <= 0){ bad = 'Quantidade inválida.'; return; }
-    var p = DB.produtos[pid];
-    itens.push({pid: pid, tk: $('.it-tam', tr).value || 'UN', qtd: q, ca: p.ca || '', validadeCA: p.validadeCA || '', proximaTroca: p.vidaUtilDias ? addDays(data, +p.vidaUtilDias) : ''});
+    var p = DB.produtos[pid], tkE = $('.it-tam', tr).value || 'UN', caE = caDoTamanho(p, tkE) || {};
+    itens.push({pid: pid, tk: tkE, qtd: q, ca: caE.ca || '', validadeCA: caE.validade || '', proximaTroca: p.vidaUtilDias ? addDays(data, +p.vidaUtilDias) : ''});
   });
   if(bad) return formError(bad);
   if(!itens.length) return formError('Adicione pelo menos um item.');
@@ -2162,7 +2164,7 @@ function exportEstoque(){
   vals(DB.produtos).filter(function(p){ return p.ativo !== false; }).sort(byName).forEach(function(p){
     tamanhosProduto(p._id).forEach(function(k){
       var s = saldoDe(p._id, k, loc); if(!s && !$('#est-zerados').checked) return;
-      rows.push({Produto:p.nome, Categoria:p.categoria, CA:p.ca || '', 'Validade CA':fmtD(p.validadeCA), Tamanho:tamLabel(k), Local:loc ? nomeLocal(loc) : 'Todos', Quantidade:s, 'Custo medio':p.custo || 0, Valor:Math.round(s * (+p.custo || 0) * 100) / 100});
+      var cK = caDoTamanho(p, k) || {}; rows.push({Produto:p.nome, Categoria:p.categoria, CA:cK.ca || '', 'Validade CA':fmtD(cK.validade), 'Situação CA':cK.ca ? caStatusCA(cK).txt : '', Tamanho:tamLabel(k), Local:loc ? nomeLocal(loc) : 'Todos', Quantidade:s, 'Custo medio':p.custo || 0, Valor:Math.round(s * (+p.custo || 0) * 100) / 100});
     });
   });
   exportXlsx('posicao-estoque', rows);
@@ -2221,51 +2223,30 @@ function caInfoHtml(rec){
 }
 
 // No cadastro de produto: consulta ao sair do campo CA (ou clicando em Consultar) e preenche os dados
-function wireCAProduto(){
-  var inp = $('#p-ca'), box = $('#p-ca-info'), last = null;
-  if(!inp) return;
-  function run(force){
-    var n = inp.value.replace(/\D/g, '');
-    if(!n){ box.innerHTML = ''; return; }
-    if(n === last && !force) return; last = n;
-    box.innerHTML = '<div class="hint">Consultando CA '+esc(n)+' na base do Ministério do Trabalho...</div>';
-    consultaCA(n).then(function(rec){
-      if(inp.value.replace(/\D/g, '') !== n) return;
-      if(!rec){ box.innerHTML = '<div class="hint" style="color:var(--amber)">CA '+esc(n)+' não encontrado na base oficial. Confira o número ou <a href="https://consultaca.com/'+esc(n)+'" target="_blank" rel="noopener" style="color:var(--teal)">consulte no consultaca.com</a>.</div>'; return; }
-      $('#p-val').value = rec.v || '';
-      if(!$('#p-fab').value.trim() && rec.f) $('#p-fab').value = rec.f;
-      if(!$('#p-nome').value.trim() && rec.e) $('#p-nome').value = rec.e;
-      $('#p-ca-sit').value = rec.s || '';
-      box.innerHTML = caInfoHtml(rec) + '<div class="hint">Validade preenchida automaticamente. Base CAEPI de '+fmtD((caepiMeta || {}).atualizadoEm)+'.</div>';
-    }).catch(function(){
-      box.innerHTML = '<div class="hint" style="color:var(--amber)">Base de CAs ainda não disponível no site. Preencha a validade manualmente ou <a href="https://consultaca.com/'+esc(n)+'" target="_blank" rel="noopener" style="color:var(--teal)">consulte no consultaca.com</a>.</div>';
-      last = null;
-    });
-  }
-  inp.addEventListener('blur', function(){ run(false); });
-  inp.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); run(true); } });
-  formHandlers['consultar-ca'] = function(){ run(true); };
-}
-
 // Na aba Validade e CA: atualiza validade e situação de todos os produtos pela base oficial
 formHandlers['atualizar-cas'] = function(btn){
   if(!can('produtos')) return;
-  var prods = vals(DB.produtos).filter(function(p){ return p.ca && /\d/.test(p.ca); });
+  var prods = vals(DB.produtos).filter(function(p){ return produtoCAs(p).some(function(c){ return /\d/.test(c.ca); }); });
   if(!prods.length){ toast('Nenhum produto com CA.', 'err'); return; }
-  btn.disabled = true; btn.textContent = 'Consultando ' + prods.length + ' CAs...';
+  var nCA = prods.reduce(function(s, p){ return s + produtoCAs(p).length; }, 0);
+  btn.disabled = true; btn.textContent = 'Consultando ' + nCA + ' CAs...';
   var paths = {}, mudou = 0, naoAchou = [];
   Promise.all(prods.map(function(p){
-    return consultaCA(p.ca).then(function(rec){
-      if(!rec){ naoAchou.push(p.ca); return; }
-      if(rec.v !== p.validadeCA || rec.s !== p.caSituacao){
-        paths['produtos/' + p._id + '/validadeCA'] = rec.v || '';
-        paths['produtos/' + p._id + '/caSituacao'] = rec.s || '';
-        mudou++;
-      }
-      paths['produtos/' + p._id + '/caVerificadoEm'] = today();
+    var L = produtoCAs(p).map(function(c){ return Object.assign({}, c, {tamanhos:(c.tamanhos || []).slice()}); }), alterou = false;
+    return Promise.all(L.map(function(c){
+      return consultaCA(c.ca.replace(/\D/g, '')).then(function(rec){
+        if(!rec){ naoAchou.push(c.ca); return; }
+        if((rec.v || '') !== (c.validade || '') || (rec.s || '') !== (c.situacao || '')){ c.validade = rec.v || ''; c.situacao = rec.s || ''; alterou = true; }
+        c.verificadoEm = today();
+      });
+    })).then(function(){
+      if(alterou) mudou++;
+      var rec = espelharCAs({cas:L});
+      paths['produtos/' + p._id + '/cas'] = rec.cas;
+      ['ca','validadeCA','caSituacao','caVerificadoEm'].forEach(function(f){ paths['produtos/' + p._id + '/' + f] = rec[f]; });
     });
   })).then(function(){
-    return save(paths, 'CAs atualizados pela base oficial', mudou + ' alterado(s)' + (naoAchou.length ? ', não encontrados: ' + naoAchou.join(', ') : ''));
+    return save(paths, 'CAs atualizados pela base oficial', mudou + ' produto(s) alterado(s)' + (naoAchou.length ? ', não encontrados: ' + naoAchou.join(', ') : ''));
   }).then(function(){
     toast(mudou + ' produto(s) atualizado(s)' + (naoAchou.length ? ' · ' + naoAchou.length + ' CA(s) não encontrado(s)' : '') + '.');
   }).catch(function(){
@@ -3098,11 +3079,10 @@ function previewImportProdutos(rows){
     linhas++;
     var k = norm(nome);
     var g = grupos[k];
-    if(!g){ g = grupos[k] = {nome:nome, tamanhos:[], saldo:{}, qtdTotal:0}; ordem.push(k); }
+    if(!g){ g = grupos[k] = {nome:nome, tamanhos:[], saldo:{}, qtdTotal:0, casMap:{}, casOrdem:[]}; ordem.push(k); }
     function setIf(campo, v){ if((g[campo] == null || g[campo] === '') && v !== '' && v != null) g[campo] = v; }
     var ca = String(pick(r, ['ca','n ca','no ca','n. ca','nº ca','n° ca','numero ca','numero do ca','certificado de aprovacao'])).replace(/\D/g, '');
-    setIf('ca', ca);
-    setIf('validadeCA', toIso(pick(r, ['validade ca','validade do ca','vencimento ca','vencimento do ca','validade'])));
+    var valR = toIso(pick(r, ['validade ca','validade do ca','vencimento ca','vencimento do ca','validade']));
     var cat = pick(r, ['categoria','tipo']); if(cat !== '') setIf('categoria', parseCategoria(cat));
     var grp = String(pick(r, ['grupo','subgrupo','familia','linha'])).trim(); if(grp){ setIf('grupo', grp); if(cat === '') setIf('categoria', parseCategoria(grp)); }
     setIf('fabricante', String(pick(r, ['fabricante','marca'])).trim());
@@ -3113,11 +3093,23 @@ function previewImportProdutos(rows){
     var tam = String(pick(r, ['tamanho','tam','grade','numeracao','numero'])).trim();
     var tk = tamKey(tam);
     if(tam && g.tamanhos.indexOf(tk) === -1) g.tamanhos.push(tk);
+    // cada linha pode ter seu CA: o tamanho da linha fica ligado a ele
+    if(ca){
+      var cm = g.casMap[ca]; if(!cm){ cm = g.casMap[ca] = {ca:ca, validade:'', tamanhos:[], todos:false}; g.casOrdem.push(ca); }
+      if(valR && !cm.validade) cm.validade = valR;
+      if(tam){ if(cm.tamanhos.indexOf(tk) === -1) cm.tamanhos.push(tk); } else cm.todos = true;
+    }
     var q = pick(r, ['quantidade','qtd','qtde','quant','saldo','estoque','saldo atual']);
     if(q !== '' && num(q) > 0){ var qi = Math.floor(num(q)); g.saldo[tk] = (g.saldo[tk] || 0) + qi; g.qtdTotal += qi; }
   });
   importProds = ordem.map(function(k){
-    var g = grupos[k], ex = vals(DB.produtos).find(function(p){ return norm(p.nome) === k; });
+    var g = grupos[k];
+    g.cas = g.casOrdem.map(function(n){ var c = g.casMap[n]; return {ca:n, validade:c.validade, situacao:'', verificadoEm:'', tamanhos: g.casOrdem.length > 1 && !c.todos ? c.tamanhos : []}; });
+    // tamanhos que aparecem em dois CAs: fica no primeiro
+    var visto = {}; g.cas.forEach(function(c){ c.tamanhos = c.tamanhos.filter(function(t){ if(visto[t]) return false; visto[t] = 1; return true; }); });
+    if(g.cas.length > 1 && !g.cas.some(function(c){ return !c.tamanhos.length; })){ var sobra = g.tamanhos.filter(function(t){ return !visto[t]; }); if(sobra.length) g.cas[0].tamanhos = g.cas[0].tamanhos.concat(sobra); }
+    delete g.casMap; delete g.casOrdem;
+    var ex = vals(DB.produtos).find(function(p){ return norm(p.nome) === k; });
     g.existenteId = ex ? ex._id : null;
     if(!g.categoria) g.categoria = ex ? ex.categoria : 'EPI';
     return g;
@@ -3125,23 +3117,25 @@ function previewImportProdutos(rows){
   if(!importProds.length){ toast('Nenhuma linha com a coluna "Produto" (ou "Nome") encontrada.', 'err'); return; }
 
   // completa validade/fabricante pela base oficial de CAs
-  var semValidade = importProds.filter(function(g){ return g.ca && !g.validadeCA; });
+  var semValidade = [];
+  importProds.forEach(function(g){ g.cas.forEach(function(c){ if(!c.validade) semValidade.push({g:g, c:c}); }); });
   openModal('<div class="modal-title">Importar produtos / EPIs</div><div class="modal-sub">Lendo a planilha'+(semValidade.length ? ' e consultando ' + semValidade.length + ' CA(s) na base oficial' : '')+'...</div>', 'wide');
-  Promise.all(semValidade.map(function(g){
-    return consultaCA(g.ca).then(function(rec){ if(rec){ g.validadeCA = rec.v || ''; g.caSituacao = rec.s || ''; g.caVerificadoEm = today(); if(!g.fabricante && rec.f) g.fabricante = rec.f; g.caAuto = true; } }).catch(function(){});
+  Promise.all(semValidade.map(function(x){
+    var g = x.g, c = x.c;
+    return consultaCA(c.ca).then(function(rec){ if(rec){ c.validade = rec.v || ''; c.situacao = rec.s || ''; c.verificadoEm = today(); if(!g.fabricante && rec.f) g.fabricante = rec.f; g.caAuto = (g.caAuto || 0) + 1; } }).catch(function(){});
   })).then(function(){ mostrarPreviewProdutos(linhas); });
 }
 
 function mostrarPreviewProdutos(linhas){
   var novos = importProds.filter(function(g){ return !g.existenteId; }).length, atual = importProds.length - novos;
-  var unid = importProds.reduce(function(s, g){ return s + g.qtdTotal; }, 0), auto = importProds.filter(function(g){ return g.caAuto; }).length;
+  var unid = importProds.reduce(function(s, g){ return s + g.qtdTotal; }, 0), auto = importProds.reduce(function(s, g){ return s + (g.caAuto || 0); }, 0);
   var temSaldo = unid > 0;
   openModal('<div class="modal-title">Importar produtos / EPIs</div><div class="modal-sub">'+linhas+' linhas lidas · '+importProds.length+' produtos · '+novos+' novos · '+atual+' já cadastrados (serão atualizados)'+(auto ? ' · ' + auto + ' validade(s) de CA preenchida(s) pela base oficial' : '')+'</div>' +
     '<div class="table-wrap" style="max-height:340px;overflow:auto"><table class="items-table"><thead><tr><th>Produto</th><th>Categoria</th><th>CA</th><th>Validade CA</th><th>Vida útil</th><th>Tamanhos / quantidade</th></tr></thead><tbody>' +
     importProds.slice(0, 300).map(function(g){
       var tams = Object.keys(g.saldo).length ? Object.keys(g.saldo).map(function(t){ return '<span class="chip">'+esc(t === 'UN' ? 'UN' : t)+' <b>'+g.saldo[t]+'</b></span>'; }).join('') : g.tamanhos.map(function(t){ return '<span class="chip">'+esc(t)+'</span>'; }).join('');
       return '<tr><td>'+esc(g.nome)+(g.existenteId ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">atualizar</span>' : ' <span class="pill teal" style="padding:0 6px;font-size:10px">novo</span>')+'</td><td>'+esc(g.categoria)+'</td>' +
-        '<td class="mono">'+esc(g.ca || '—')+'</td><td class="mono">'+fmtD(g.validadeCA)+(g.caAuto ? ' <span class="pill blue" style="padding:0 6px;font-size:10px">base oficial</span>' : '')+'</td><td>'+vidaUtilTxt(g.vidaUtilDias)+'</td><td><div class="chips">'+(tams || '—')+'</div></td></tr>';
+        '<td class="mono">'+(g.cas.length ? g.cas.map(function(c){ return '<div>'+esc(c.ca)+(c.tamanhos.length ? ' <span style="color:var(--text-faint)">'+esc(c.tamanhos.join(', '))+'</span>' : '')+'</div>'; }).join('') : '—')+'</td><td class="mono">'+(g.cas.map(function(c){ return '<div>'+fmtD(c.validade)+'</div>'; }).join('') || '—')+(g.caAuto ? ' <span class="pill blue" style="padding:0 6px;font-size:10px">base oficial</span>' : '')+'</td><td>'+vidaUtilTxt(g.vidaUtilDias)+'</td><td><div class="chips">'+(tams || '—')+'</div></td></tr>';
     }).join('') + '</tbody></table></div>' +
     (temSaldo ? '<div class="action-box"><label class="modal-check" style="margin-top:0"><input type="checkbox" id="ip-saldo" checked> Lançar as quantidades da planilha como <b>saldo inicial</b> ('+fmtN(unid)+' unidades)</label>' +
       '<div class="modal-grid" style="margin-top:8px">' + field('No local de estoque', '<select id="ip-loc">'+optList(locaisOpts(), defaultLocal(), vals(DB.locais).length ? null : 'Cadastre um local em Cadastros')+'</select>') + '</div>' +
@@ -3158,10 +3152,11 @@ formHandlers['confirmar-import-produtos'] = function(btn){
     var base = g.existenteId ? Object.assign({}, DB.produtos[id]) : {categoria:'EPI', unidade:'UN', ativo:true, estoqueMinimo:0, custo:0, vidaUtilDias:0, criadoEm:nowTs()};
     delete base._id;
     var rec = Object.assign(base, {nome: g.existenteId ? base.nome : g.nome, categoria: g.categoria || base.categoria, atualizadoEm: nowTs()});
-    ['ca','validadeCA','fabricante','grupo','vidaUtilDias','unidade','estoqueMinimo','custo','caSituacao','caVerificadoEm'].forEach(function(f){ if(g[f] !== undefined && g[f] !== '') rec[f] = g[f]; });
+    ['fabricante','grupo','vidaUtilDias','unidade','estoqueMinimo','custo'].forEach(function(f){ if(g[f] !== undefined && g[f] !== '') rec[f] = g[f]; });
     var tams = (base.tamanhos || []).map(tamKey);
     g.tamanhos.forEach(function(t){ if(t !== 'UN' && tams.indexOf(t) === -1) tams.push(t); });
     rec.tamanhos = tams;
+    if(g.cas.length){ rec.cas = g.cas.map(function(c){ return {ca:c.ca, validade:c.validade || '', situacao:c.situacao || '', verificadoEm:c.verificadoEm || '', tamanhos:c.tamanhos}; }); espelharCAs(rec); }
     p['produtos/' + id] = rec;
     if(lancar) Object.keys(g.saldo).forEach(function(t){ ops.push({pid:id, tk:t, loc:loc, delta:g.saldo[t]}); });
   });
@@ -3430,11 +3425,152 @@ function resumoValorCA(loc){
   var venc = 0, geral = 0, nVenc = 0;
   vals(DB.produtos).forEach(function(p){
     if(p.ativo === false) return;
-    var v = valorEstoqueProduto(p, loc); geral += v;
-    if(p.ca && caStatus(p).cls === 'red' && saldoProduto(p._id, loc) > 0){ venc += v; nVenc++; }
+    geral += valorEstoqueProduto(p, loc);
+    var sv = saldoCAVencido(p, loc);
+    if(sv > 0){ venc += sv * (+p.custo || 0); nVenc++; }
   });
   return {vencido:venc, geral:geral, n:nVenc};
 }
+
+// =====================================================================
+// VÁRIOS CAs POR PRODUTO — cada CA cobre alguns tamanhos (ou todos)
+// =====================================================================
+// p.cas = [{ca, validade, situacao, verificadoEm, fabricante, tamanhos:[tk,...]}]
+// tamanhos vazio = cobre os tamanhos que não estão em outro CA.
+// Os campos antigos (p.ca, p.validadeCA, p.caSituacao, p.caVerificadoEm) espelham o 1º CA.
+function produtoCAs(p){
+  if(!p) return [];
+  if(p.cas && p.cas.length) return (Array.isArray(p.cas) ? p.cas : vals(p.cas)).filter(function(c){ return c && c.ca; });
+  return p.ca ? [{ca:p.ca, validade:p.validadeCA || '', situacao:p.caSituacao || '', verificadoEm:p.caVerificadoEm || '', fabricante:p.fabricante || '', tamanhos:[]}] : [];
+}
+function caStatusCA(c){
+  if(!c || !c.ca) return {cls:'gray', txt:'Sem CA', d:null};
+  if(c.situacao && norm(c.situacao) !== 'valido' && norm(c.situacao) !== 'vencido') return {cls:'red', txt:'CA ' + c.situacao.toLowerCase(), d:null};
+  if(!c.validade) return {cls:'amber', txt:'Sem validade', d:null};
+  var d = daysUntil(c.validade), lim = +cfg('diasAlertaCA', 60);
+  if(d < 0) return {cls:'red', txt:'CA vencido', d:d};
+  if(d <= lim) return {cls:'amber', txt:'Vence em ' + d + 'd', d:d};
+  return {cls:'teal', txt:'Válido', d:d};
+}
+var CA_RANK = {red:3, amber:2, teal:1, gray:0};
+// Situação do produto = a pior entre os CAs dele
+function caStatus(p){
+  var L = produtoCAs(p); if(!L.length) return {cls:'gray', txt:'Sem CA', d:null};
+  var w = null;
+  L.forEach(function(c){ var s = caStatusCA(c); if(!w || CA_RANK[s.cls] > CA_RANK[w.cls] || (s.cls === w.cls && s.d != null && (w.d == null || s.d < w.d))) w = s; });
+  return w;
+}
+// Tamanhos que cada CA cobre de fato
+function tamanhosDoCA(p, c){
+  var L = produtoCAs(p), todos = tamanhosProduto(p._id);
+  if(c.tamanhos && c.tamanhos.length) return c.tamanhos.slice();
+  var outros = {}; L.forEach(function(o){ if(o !== c) (o.tamanhos || []).forEach(function(t){ outros[t] = 1; }); });
+  return todos.filter(function(t){ return !outros[t]; });
+}
+function caDoTamanho(p, tk){
+  var L = produtoCAs(p); if(!L.length) return null;
+  var c = L.find(function(x){ return (x.tamanhos || []).indexOf(tk) !== -1; });
+  return c || L.find(function(x){ return !(x.tamanhos || []).length; }) || null;
+}
+function tamCAVencido(p, tk){ var c = caDoTamanho(p, tk); return !!c && caStatusCA(c).cls === 'red'; }
+function saldoCAVencido(p, loc){
+  return tamanhosProduto(p._id).reduce(function(s, k){ return s + (tamCAVencido(p, k) ? saldoDe(p._id, k, loc) : 0); }, 0);
+}
+function cvsTxt(p){ return produtoCAs(p).map(function(c){ return c.ca; }).join(' / '); }
+// Lista de CAs (um por linha) para a aba de CAs
+function listaCAs(loc){
+  var out = [];
+  vals(DB.produtos).forEach(function(p){
+    if(p.ativo === false) return;
+    produtoCAs(p).forEach(function(c){
+      var tams = tamanhosDoCA(p, c), saldo = tams.reduce(function(s, k){ return s + saldoDe(p._id, k, loc); }, 0);
+      if(loc && saldo <= 0) return;
+      out.push({p:p, c:c, st:caStatusCA(c), tams:tams, saldo:saldo, valor:saldo * (+p.custo || 0), varios:produtoCAs(p).length > 1});
+    });
+  });
+  return out.sort(function(a, b){ return (a.c.validade || '9') < (b.c.validade || '9') ? -1 : ((a.c.validade || '9') > (b.c.validade || '9') ? 1 : (a.p.nome < b.p.nome ? -1 : 1)); });
+}
+// Espelha o 1º CA nos campos antigos (relatórios, exportações, busca)
+function espelharCAs(rec){
+  var L = (rec.cas || []).filter(function(c){ return c && c.ca; });
+  rec.cas = L.length ? L : null;
+  var f = L[0] || {};
+  rec.ca = f.ca || ''; rec.validadeCA = f.validade || ''; rec.caSituacao = f.situacao || ''; rec.caVerificadoEm = f.verificadoEm || '';
+  return rec;
+}
+function tamsTxt(t){ return (t || []).map(tamLabel).join(', '); }
+
+// ---------- editor de CAs no cadastro do produto ----------
+function caRowHtml(c){
+  c = c || {};
+  return '<div class="ca-row" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px">' +
+    '<div style="display:grid;grid-template-columns:1fr auto 1fr auto;gap:8px;align-items:end">' +
+      '<div class="modal-field" style="margin:0"><label>Nº do CA</label><input class="ca-num" value="'+esc(c.ca || '')+'" placeholder="Ex.: 38201" inputmode="numeric"></div>' +
+      '<button class="btn btn-sm" data-act="ca-consultar" type="button" style="height:38px">Consultar</button>' +
+      '<div class="modal-field" style="margin:0"><label>Validade</label><input type="date" class="ca-val" value="'+esc(c.validade || '')+'"></div>' +
+      '<button class="btn btn-sm btn-ghost" data-act="ca-remover" type="button" title="Remover este CA" style="height:38px">Remover</button>' +
+    '</div>' +
+    '<div class="modal-field" style="margin:8px 0 0"><label>Tamanhos deste CA</label><input class="ca-tams" value="'+esc((c.tamanhos || []).join(', '))+'" placeholder="Ex.: 40, 41, 42 — vazio = todos os tamanhos (ou os que não estão em outro CA)"></div>' +
+    '<input type="hidden" class="ca-sit" value="'+esc(c.situacao || '')+'"><input type="hidden" class="ca-ver" value="'+esc(c.verificadoEm || '')+'"><input type="hidden" class="ca-orig" value="'+esc(c.ca || '')+'">' +
+    '<div class="ca-info"></div></div>';
+}
+function caEditorHtml(p){
+  var L = produtoCAs(p);
+  return '<div class="full" style="grid-column:1/-1"><div class="section-label" style="margin-top:4px">Certificados de Aprovação</div>' +
+    '<div id="p-cas">' + (L.length ? L : [{}]).map(caRowHtml).join('') + '</div>' +
+    '<button class="btn btn-sm" type="button" data-act="ca-adicionar">+ Adicionar outro CA</button>' +
+    '<div style="margin-top:6px;font-size:11.5px;line-height:1.45;color:var(--text-faint)">Um produto pode ter mais de um CA (ex.: tamanhos de fabricantes diferentes). Informe em cada CA os tamanhos que ele cobre; deixe vazio no CA que vale para os demais. Ao sair do campo, a validade é buscada na base oficial.</div></div>';
+}
+function lerCAsForm(tamsProduto){
+  var out = [], vistos = {}, erro = '';
+  $$('#p-cas .ca-row').forEach(function(r){
+    var n = $('.ca-num', r).value.replace(/\D/g, '');
+    if(!n) return;
+    var tams = $('.ca-tams', r).value.split(',').map(function(t){ return tamKey(t); }).filter(function(t){ return t && t !== 'UN'; });
+    tams.forEach(function(t){
+      if(vistos[t]) erro = 'O tamanho ' + t + ' está em dois CAs (' + vistos[t] + ' e ' + n + ').';
+      else vistos[t] = n;
+      if(tamsProduto.length && tamsProduto.indexOf(t) === -1) erro = 'O tamanho ' + t + ' do CA ' + n + ' não está nos tamanhos do produto.';
+    });
+    var mesmo = n === $('.ca-orig', r).value.replace(/\D/g, '');
+    out.push({ca:n, validade:$('.ca-val', r).value, situacao:(mesmo || $('.ca-info', r).innerHTML) ? $('.ca-sit', r).value : '', verificadoEm:$('.ca-ver', r).value, tamanhos:tams});
+  });
+  if(!erro && out.length > 1 && out.filter(function(c){ return !c.tamanhos.length; }).length > 1) erro = 'Só um CA pode ficar com os tamanhos em branco (os que sobram). Informe os tamanhos dos outros.';
+  if(!erro && out.length > 1 && tamsProduto.length && !out.some(function(c){ return !c.tamanhos.length; })){
+    var sem = tamsProduto.filter(function(t){ return !vistos[t]; });
+    if(sem.length) erro = 'Tamanho(s) sem CA: ' + sem.join(', ') + '. Coloque-os em um CA ou deixe um CA com os tamanhos em branco.';
+  }
+  return {cas:out, erro:erro};
+}
+function consultarCARow(r, force){
+  var inp = $('.ca-num', r), box = $('.ca-info', r), n = inp.value.replace(/\D/g, '');
+  if(!n){ box.innerHTML = ''; return; }
+  if(r.dataset.last === n && !force) return; r.dataset.last = n;
+  box.innerHTML = '<div class="hint">Consultando CA '+esc(n)+' na base do Ministério do Trabalho...</div>';
+  consultaCA(n).then(function(rec){
+    if(inp.value.replace(/\D/g, '') !== n) return;
+    if(!rec){ box.innerHTML = '<div class="hint" style="color:var(--amber)">CA '+esc(n)+' não encontrado na base oficial. Confira o número ou <a href="https://consultaca.com/'+esc(n)+'" target="_blank" rel="noopener" style="color:var(--teal)">consulte no consultaca.com</a>.</div>'; return; }
+    $('.ca-val', r).value = rec.v || ''; $('.ca-sit', r).value = rec.s || ''; $('.ca-ver', r).value = today();
+    var fab = $('#p-fab'), nome = $('#p-nome');
+    if(fab && !fab.value.trim() && rec.f) fab.value = rec.f;
+    if(nome && !nome.value.trim() && rec.e) nome.value = rec.e;
+    box.innerHTML = caInfoHtml(rec) + '<div class="hint">Validade preenchida automaticamente. Base CAEPI de '+fmtD((caepiMeta || {}).atualizadoEm)+'.</div>';
+  }).catch(function(){
+    box.innerHTML = '<div class="hint" style="color:var(--amber)">Base de CAs ainda não disponível no site. Preencha a validade manualmente ou <a href="https://consultaca.com/'+esc(n)+'" target="_blank" rel="noopener" style="color:var(--teal)">consulte no consultaca.com</a>.</div>';
+    delete r.dataset.last;
+  });
+}
+function wireCAProduto(){
+  var wrap = $('#p-cas'); if(!wrap) return;
+  wrap.addEventListener('focusout', function(e){ if(e.target.classList.contains('ca-num')) consultarCARow(e.target.closest('.ca-row'), false); });
+  wrap.addEventListener('keydown', function(e){ if(e.key === 'Enter' && e.target.classList.contains('ca-num')){ e.preventDefault(); consultarCARow(e.target.closest('.ca-row'), true); } });
+}
+formHandlers['ca-consultar'] = function(btn){ consultarCARow(btn.closest('.ca-row'), true); };
+formHandlers['ca-adicionar'] = function(){ $('#p-cas').insertAdjacentHTML('beforeend', caRowHtml({})); var rs = $$('#p-cas .ca-row'); $('.ca-num', rs[rs.length - 1]).focus(); };
+formHandlers['ca-remover'] = function(btn){
+  var rows = $$('#p-cas .ca-row'), r = btn.closest('.ca-row');
+  if(rows.length > 1) r.remove(); else { $$('input', r).forEach(function(i){ i.value = ''; }); $('.ca-info', r).innerHTML = ''; }
+};
 
 LOGO_SRC = document.querySelector('.brand-logo-img').getAttribute('src');
 </script>

@@ -43,51 +43,30 @@ function caInfoHtml(rec){
 }
 
 // No cadastro de produto: consulta ao sair do campo CA (ou clicando em Consultar) e preenche os dados
-function wireCAProduto(){
-  var inp = $('#p-ca'), box = $('#p-ca-info'), last = null;
-  if(!inp) return;
-  function run(force){
-    var n = inp.value.replace(/\D/g, '');
-    if(!n){ box.innerHTML = ''; return; }
-    if(n === last && !force) return; last = n;
-    box.innerHTML = '<div class="hint">Consultando CA '+esc(n)+' na base do Ministério do Trabalho...</div>';
-    consultaCA(n).then(function(rec){
-      if(inp.value.replace(/\D/g, '') !== n) return;
-      if(!rec){ box.innerHTML = '<div class="hint" style="color:var(--amber)">CA '+esc(n)+' não encontrado na base oficial. Confira o número ou <a href="https://consultaca.com/'+esc(n)+'" target="_blank" rel="noopener" style="color:var(--teal)">consulte no consultaca.com</a>.</div>'; return; }
-      $('#p-val').value = rec.v || '';
-      if(!$('#p-fab').value.trim() && rec.f) $('#p-fab').value = rec.f;
-      if(!$('#p-nome').value.trim() && rec.e) $('#p-nome').value = rec.e;
-      $('#p-ca-sit').value = rec.s || '';
-      box.innerHTML = caInfoHtml(rec) + '<div class="hint">Validade preenchida automaticamente. Base CAEPI de '+fmtD((caepiMeta || {}).atualizadoEm)+'.</div>';
-    }).catch(function(){
-      box.innerHTML = '<div class="hint" style="color:var(--amber)">Base de CAs ainda não disponível no site. Preencha a validade manualmente ou <a href="https://consultaca.com/'+esc(n)+'" target="_blank" rel="noopener" style="color:var(--teal)">consulte no consultaca.com</a>.</div>';
-      last = null;
-    });
-  }
-  inp.addEventListener('blur', function(){ run(false); });
-  inp.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); run(true); } });
-  formHandlers['consultar-ca'] = function(){ run(true); };
-}
-
 // Na aba Validade e CA: atualiza validade e situação de todos os produtos pela base oficial
 formHandlers['atualizar-cas'] = function(btn){
   if(!can('produtos')) return;
-  var prods = vals(DB.produtos).filter(function(p){ return p.ca && /\d/.test(p.ca); });
+  var prods = vals(DB.produtos).filter(function(p){ return produtoCAs(p).some(function(c){ return /\d/.test(c.ca); }); });
   if(!prods.length){ toast('Nenhum produto com CA.', 'err'); return; }
-  btn.disabled = true; btn.textContent = 'Consultando ' + prods.length + ' CAs...';
+  var nCA = prods.reduce(function(s, p){ return s + produtoCAs(p).length; }, 0);
+  btn.disabled = true; btn.textContent = 'Consultando ' + nCA + ' CAs...';
   var paths = {}, mudou = 0, naoAchou = [];
   Promise.all(prods.map(function(p){
-    return consultaCA(p.ca).then(function(rec){
-      if(!rec){ naoAchou.push(p.ca); return; }
-      if(rec.v !== p.validadeCA || rec.s !== p.caSituacao){
-        paths['produtos/' + p._id + '/validadeCA'] = rec.v || '';
-        paths['produtos/' + p._id + '/caSituacao'] = rec.s || '';
-        mudou++;
-      }
-      paths['produtos/' + p._id + '/caVerificadoEm'] = today();
+    var L = produtoCAs(p).map(function(c){ return Object.assign({}, c, {tamanhos:(c.tamanhos || []).slice()}); }), alterou = false;
+    return Promise.all(L.map(function(c){
+      return consultaCA(c.ca.replace(/\D/g, '')).then(function(rec){
+        if(!rec){ naoAchou.push(c.ca); return; }
+        if((rec.v || '') !== (c.validade || '') || (rec.s || '') !== (c.situacao || '')){ c.validade = rec.v || ''; c.situacao = rec.s || ''; alterou = true; }
+        c.verificadoEm = today();
+      });
+    })).then(function(){
+      if(alterou) mudou++;
+      var rec = espelharCAs({cas:L});
+      paths['produtos/' + p._id + '/cas'] = rec.cas;
+      ['ca','validadeCA','caSituacao','caVerificadoEm'].forEach(function(f){ paths['produtos/' + p._id + '/' + f] = rec[f]; });
     });
   })).then(function(){
-    return save(paths, 'CAs atualizados pela base oficial', mudou + ' alterado(s)' + (naoAchou.length ? ', não encontrados: ' + naoAchou.join(', ') : ''));
+    return save(paths, 'CAs atualizados pela base oficial', mudou + ' produto(s) alterado(s)' + (naoAchou.length ? ', não encontrados: ' + naoAchou.join(', ') : ''));
   }).then(function(){
     toast(mudou + ' produto(s) atualizado(s)' + (naoAchou.length ? ' · ' + naoAchou.length + ' CA(s) não encontrado(s)' : '') + '.');
   }).catch(function(){

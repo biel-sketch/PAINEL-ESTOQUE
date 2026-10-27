@@ -205,3 +205,5 @@
 #val-table tfoot td{border-top:1px solid var(--line-strong);border-bottom:none;font-size:12.5px;padding-top:9px;padding-bottom:9px;}
 #val-table tfoot tr + tr td{border-top:none;}
 .mc-qtd{width:80px;}
+.chip.chip-venc{background:rgba(239,68,68,.14);border-color:rgba(239,68,68,.55);color:#FCA5A5;}
+.chip.chip-venc b{color:#F87171;}

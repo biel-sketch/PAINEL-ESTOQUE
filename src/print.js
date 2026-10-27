@@ -55,7 +55,7 @@ function exportEstoque(){
   vals(DB.produtos).filter(function(p){ return p.ativo !== false; }).sort(byName).forEach(function(p){
     tamanhosProduto(p._id).forEach(function(k){
       var s = saldoDe(p._id, k, loc); if(!s && !$('#est-zerados').checked) return;
-      rows.push({Produto:p.nome, Categoria:p.categoria, CA:p.ca || '', 'Validade CA':fmtD(p.validadeCA), Tamanho:tamLabel(k), Local:loc ? nomeLocal(loc) : 'Todos', Quantidade:s, 'Custo medio':p.custo || 0, Valor:Math.round(s * (+p.custo || 0) * 100) / 100});
+      var cK = caDoTamanho(p, k) || {}; rows.push({Produto:p.nome, Categoria:p.categoria, CA:cK.ca || '', 'Validade CA':fmtD(cK.validade), 'Situação CA':cK.ca ? caStatusCA(cK).txt : '', Tamanho:tamLabel(k), Local:loc ? nomeLocal(loc) : 'Todos', Quantidade:s, 'Custo medio':p.custo || 0, Valor:Math.round(s * (+p.custo || 0) * 100) / 100});
     });
   });
   exportXlsx('posicao-estoque', rows);

@@ -47,7 +47,7 @@ function handleAction(a, el){
     case 'importar-empregados': importMode = 'empregados'; $('#file-import').value = ''; $('#file-import').click(); break;
     case 'export-estoque': exportEstoque(); break;
     case 'export-movs': exportXlsx('movimentacoes', filtroMovs().map(function(m){ var e = DB.empregados[m.empregadoId] || {}; var p = DB.produtos[m.pid] || {}; return {Data:fmtD(m.data), Tipo:(MOV_TIPOS[m.tipo] || {}).label || m.tipo, Produto:p.nome, CA:p.ca || '', Tamanho:tamLabel(m.tk), Quantidade:m.qtd * (((MOV_TIPOS[m.tipo] || {}).sinal) === -1 ? -1 : 1), 'Afeta saldo':((MOV_TIPOS[m.tipo] || {}).sinal) === 0 ? 'Não' : 'Sim', Local:nomeLocal(m.loc), Empregado:e.nome || '', Fornecedor:m.fornecedor || '', NF:m.doc || '', Motivo:m.motivo || '', 'Custo unit.':m.custoUnit || '', Usuario:m.usuario}; })); break;
-    case 'export-produtos': exportXlsx('produtos', vals(DB.produtos).sort(byName).map(function(p){ return {Produto:p.nome, Categoria:p.categoria, CA:p.ca || '', 'Validade CA':fmtD(p.validadeCA), Fabricante:p.fabricante || '', 'Vida util (dias)':p.vidaUtilDias || '', Tamanhos:(p.tamanhos || []).join(', '), 'Estoque minimo':p.estoqueMinimo || 0, Custo:p.custo || 0, Saldo:saldoProduto(p._id), Ativo:p.ativo === false ? 'Não' : 'Sim'}; })); break;
+    case 'export-produtos': exportXlsx('produtos', vals(DB.produtos).sort(byName).map(function(p){ return {Produto:p.nome, Categoria:p.categoria, CA:cvsTxt(p), 'Validade CA':produtoCAs(p).map(function(c){ return fmtD(c.validade); }).join(' / '), 'Tamanhos por CA':produtoCAs(p).length > 1 ? produtoCAs(p).map(function(c){ return c.ca + ': ' + tamsTxt(tamanhosDoCA(p, c)); }).join(' | ') : '', Fabricante:p.fabricante || '', 'Vida util (dias)':p.vidaUtilDias || '', Tamanhos:(p.tamanhos || []).join(', '), 'Estoque minimo':p.estoqueMinimo || 0, Custo:p.custo || 0, Saldo:saldoProduto(p._id), Ativo:p.ativo === false ? 'Não' : 'Sim'}; })); break;
     case 'export-entregas': exportEntregas(); break;
     case 'export-empregados': exportXlsx('empregados', vals(DB.empregados).sort(byName).map(function(e){ var t = e.tamanhos || {}; return {Nome:e.nome, CPF:e.cpf || '', Empresa:nomeEmpresa(e.empresaId), Cliente:e.cliente || '', Cargo:nomeCargo(e.cargoId), Admissao:fmtD(e.admissao), Camisa:t.camisa || '', Calca:t.calca || '', Calcado:t.calcado || '', Luva:t.luva || '', Situacao:e.ativo === false ? 'Desligado' : 'Ativo', 'Itens em posse':itensEmPosse(e._id).reduce(function(s, x){ return s + x.aberto; }, 0)}; })); break;
     case 'rel-export': if(relData && relData.rows) exportXlsx(relData.nome, relData.rows); else toast('Nada para exportar nesta aba.', 'err'); break;
@@ -238,37 +238,38 @@ function formProduto(pid){
     field('Nome', '<input id="p-nome" value="'+esc(p.nome || '')+'">', 'full') +
     field('Categoria', '<select id="p-cat">'+optList([['EPI','EPI'],['Uniforme','Uniforme'],['Material','Material']], p.categoria)+'</select>') +
     field('Unidade', '<select id="p-un">'+optList(unidadesOpts(p.unidade), (p.unidade || 'UN').toUpperCase())+'</select>') +
-    field('Nº do CA', '<div style="display:flex;gap:8px"><input id="p-ca" value="'+esc(p.ca || '')+'" placeholder="Só para EPI" inputmode="numeric"><button class="btn btn-sm" data-act="consultar-ca" type="button">Consultar</button></div><input type="hidden" id="p-ca-sit" value="'+esc(p.caSituacao || '')+'">', '', 'Ao sair do campo, a validade é buscada na base oficial.') +
-    field('Validade do CA', '<input type="date" id="p-val" value="'+esc(p.validadeCA || '')+'">') +
-    '<div class="full" id="p-ca-info" style="grid-column:1/-1"></div>' +
     field('Grupo', '<input id="p-grupo" list="dl-grupos-prod" value="'+esc(p.grupo || '')+'" placeholder="Ex.: Luvas, Calçados, Uniforme">', '', 'Usado para agrupar as compras.') +
     field('Fabricante / marca', '<input id="p-fab" value="'+esc(p.fabricante || '')+'">') +
     '<datalist id="dl-grupos-prod">'+cmpGruposLista().map(function(g){ return '<option value="'+esc(g)+'">'; }).join('')+'</datalist>' +
     field('Vida útil (troca)', '<div style="display:flex;gap:8px"><input type="number" id="p-vu" min="0" value="'+vuN+'" style="width:90px"><select id="p-vuun">'+optList([['1','dias'],['30','meses'],['365','anos']], String(vuUn))+'</select></div>', '', 'Usada para calcular a próxima troca.') +
     field('Estoque mínimo', '<input type="number" id="p-min" min="0" value="'+(p.estoqueMinimo || 0)+'">', '', 'Gera alerta quando o saldo total ficar abaixo.') +
     field('Tamanhos', '<input id="p-tams" value="'+esc((p.tamanhos || []).join(', '))+'" placeholder="Ex.: P, M, G, GG  ou  36, 38, 40">', 'full', 'Separe por vírgula. Deixe vazio para produto de tamanho único.') +
+    caEditorHtml(p) +
     field('Custo médio (R$)', '<input id="p-custo" value="'+(p.custo ? String(p.custo).replace('.', ',') : '')+'">', '', 'Atualizado automaticamente nas entradas com custo.') +
     field('Situação', '<select id="p-ativo">'+optList([['1','Ativo'],['0','Inativo']], p.ativo === false ? '0' : '1')+'</select>') +
     '</div>' + modalActions('Salvar', 'salvar-produto', pid && can('admin') && !saldoProduto(pid) && !vals(DB.movimentos).some(function(m){ return m.pid === pid; }) ? '<button class="btn btn-danger" data-act="excluir-produto" data-id="'+pid+'" style="margin-right:auto">Excluir</button>' : '') + (pid ? '<input type="hidden" id="p-id" value="'+pid+'">' : ''));
   wireCAProduto();
 }
 formHandlers['salvar-produto'] = function(btn){
-  if(($('#p-ca').value.trim()) !== ((DB.produtos[($('#p-id') || {}).value] || {}).ca || '') && !$('#p-ca-info').innerHTML) $('#p-ca-sit').value = '';
   var pid = ($('#p-id') || {}).value, nome = $('#p-nome').value.trim();
   if(!nome) return formError('Informe o nome.');
   var dup = vals(DB.produtos).find(function(x){ return x._id !== pid && norm(x.nome) === norm(nome); });
   if(dup) return formError('Já existe um produto com esse nome.');
   var tams = $('#p-tams').value.split(',').map(function(t){ return tamKey(t); }).filter(function(t){ return t && t !== 'UN'; });
+  var lc = lerCAsForm(tams); if(lc.erro) return formError(lc.erro);
   var rec = Object.assign({}, pid ? DB.produtos[pid] : {}, {
-    nome: nome, categoria: $('#p-cat').value, unidade: $('#p-un').value || 'UN', ca: $('#p-ca').value.trim(), validadeCA: $('#p-val').value,
+    nome: nome, categoria: $('#p-cat').value, unidade: $('#p-un').value || 'UN', cas: lc.cas,
     fabricante: $('#p-fab').value.trim(), grupo: $('#p-grupo').value.trim(), vidaUtilDias: Math.round(num($('#p-vu').value) * +$('#p-vuun').value), estoqueMinimo: Math.floor(num($('#p-min').value)),
-    tamanhos: tams, custo: num($('#p-custo').value), ativo: $('#p-ativo').value === '1', atualizadoEm: nowTs(),
-    caSituacao: $('#p-ca').value.trim() ? $('#p-ca-sit').value : ''
+    tamanhos: tams, custo: num($('#p-custo').value), ativo: $('#p-ativo').value === '1', atualizadoEm: nowTs()
   });
+  espelharCAs(rec);
   delete rec._id;
   var id = pid || store.key(), paths = {}; paths['produtos/' + id] = rec;
   busy(btn, true);
-  save(paths, pid ? 'Produto alterado' : 'Produto criado', nome).then(function(){ closeModal(); toast('Produto salvo.'); }).catch(function(e){ busy(btn, false); formError(e.message); });
+  // CA sem validade: tenta a base oficial antes de salvar
+  Promise.all((rec.cas || []).filter(function(c){ return !c.validade; }).map(function(c){
+    return consultaCA(c.ca).then(function(r){ if(r){ c.validade = r.v || ''; c.situacao = r.s || ''; c.verificadoEm = today(); } }).catch(function(){});
+  })).then(function(){ espelharCAs(rec); return save(paths, pid ? 'Produto alterado' : 'Produto criado', nome); }).then(function(){ closeModal(); toast('Produto salvo.'); }).catch(function(e){ busy(btn, false); formError(e.message); });
 };
 formHandlers['excluir-produto'] = function(el){
   var pid = el.dataset.id; if(!confirmInline(el, 'Confirmar exclusão')) return;
@@ -286,11 +287,11 @@ function verProduto(pid){
   var p = DB.produtos[pid]; if(!p) return;
   var locs = vals(DB.locais).sort(byName), tams = tamanhosProduto(pid), ca = caStatus(p);
   var grid = '<table class="items-table"><thead><tr><th>Tamanho</th>' + locs.map(function(l){ return '<th class="num">'+esc(l.nome)+'</th>'; }).join('') + '<th class="num">Total</th></tr></thead><tbody>' +
-    tams.map(function(k){ return '<tr><td class="mono">'+esc(k === 'UN' ? 'Único' : k)+'</td>' + locs.map(function(l){ return '<td class="num">'+saldoDe(pid, k, l._id)+'</td>'; }).join('') + '<td class="num"><b>'+saldoDe(pid, k)+'</b></td></tr>'; }).join('') + '</tbody></table>';
+    tams.map(function(k){ var cv = tamCAVencido(p, k); return '<tr'+(cv ? ' style="color:var(--red)"' : '')+'><td class="mono">'+esc(k === 'UN' ? 'Único' : k)+(cv ? ' <span class="pill red" style="padding:0 6px;font-size:10px">CA '+esc(caDoTamanho(p, k).ca)+' vencido</span>' : '')+'</td>' + locs.map(function(l){ return '<td class="num">'+saldoDe(pid, k, l._id)+'</td>'; }).join('') + '<td class="num"><b>'+saldoDe(pid, k)+'</b></td></tr>'; }).join('') + '</tbody></table>';
   var movs = vals(DB.movimentos).filter(function(m){ return m.pid === pid; }).sort(function(a, b){ return b.ts - a.ts; }).slice(0, 15);
   openModal('<div class="modal-title">'+esc(p.nome)+'</div><div class="info-grid">' +
-    '<div><div class="lbl">Categoria</div>'+esc(p.categoria)+'</div><div><div class="lbl">CA</div>'+esc(p.ca || '—')+(p.ca ? ' <span class="pill '+ca.cls+'" style="padding:1px 7px;font-size:10.5px">'+ca.txt+'</span>' : '')+'</div>' +
-    '<div><div class="lbl">Validade CA</div>'+fmtD(p.validadeCA)+'</div><div><div class="lbl">Vida útil</div>'+vidaUtilTxt(p.vidaUtilDias)+'</div>' +
+    '<div><div class="lbl">Categoria</div>'+esc(p.categoria)+'</div><div><div class="lbl">CA</div>'+(produtoCAs(p).length ? produtoCAs(p).map(function(c){ var st = caStatusCA(c); return '<div>'+esc(c.ca)+' <span class="pill '+st.cls+'" style="padding:1px 7px;font-size:10.5px">'+st.txt+'</span>'+(produtoCAs(p).length > 1 ? ' <span style="color:var(--text-faint);font-size:11.5px">'+esc(tamsTxt(tamanhosDoCA(p, c)))+'</span>' : '')+'</div>'; }).join('') : '—')+'</div>' +
+    '<div><div class="lbl">Validade CA</div>'+(produtoCAs(p).map(function(c){ return '<div>'+fmtD(c.validade)+'</div>'; }).join('') || '—')+'</div><div><div class="lbl">Vida útil</div>'+vidaUtilTxt(p.vidaUtilDias)+'</div>' +
     '<div><div class="lbl">Saldo total</div>'+fmtN(saldoProduto(pid))+'</div><div><div class="lbl">Mínimo</div>'+(p.estoqueMinimo || '—')+'</div><div><div class="lbl">Custo médio</div>'+(p.custo ? fmtR(p.custo) : '—')+'</div><div><div class="lbl">Fabricante</div>'+esc(p.fabricante || '—')+'</div></div>' +
     '<div class="section-label">Saldo por tamanho e local</div>' + grid +
     '<div class="section-label">Últimas movimentações</div>' + (movs.length ? '<div class="table-wrap">' + movTable(movs, true) + '</div>' : '<div style="color:var(--text-faint);font-size:12.5px">Nenhuma.</div>') +
@@ -368,7 +369,7 @@ function refreshItemEntrega(tr, autoTam){
   var avisos = [], erro = '';
   var s = saldoDe(pid, sel.value, loc), q = Math.floor(num($('.it-qtd', tr).value));
   if(q > s) erro = 'Saldo insuficiente neste local (' + s + ').';
-  var ca = caStatus(p); if(p.ca && ca.cls === 'red') avisos.push('CA vencido em ' + fmtD(p.validadeCA) + '.');
+  var caT = caDoTamanho(p, sel.value || 'UN'); if(caT && caStatusCA(caT).cls === 'red') avisos.push('CA ' + caT.ca + ' vencido em ' + fmtD(caT.validade) + '.');
   var empId = findEmpByLabel($('#e-emp').value);
   if(empId){
     var antes = itensEmPosse(empId).find(function(x){ return x.item.pid === pid; });
@@ -396,8 +397,8 @@ formHandlers['salvar-entrega'] = function(btn){
     var lab = $('.it-prod', tr).value.trim(); if(!lab) return;
     var pid = findProdByLabel(lab); if(!pid){ bad = 'Produto não encontrado: ' + lab; return; }
     var q = Math.floor(num($('.it-qtd', tr).value)); if(q <= 0){ bad = 'Quantidade inválida.'; return; }
-    var p = DB.produtos[pid];
-    itens.push({pid: pid, tk: $('.it-tam', tr).value || 'UN', qtd: q, ca: p.ca || '', validadeCA: p.validadeCA || '', proximaTroca: p.vidaUtilDias ? addDays(data, +p.vidaUtilDias) : ''});
+    var p = DB.produtos[pid], tkE = $('.it-tam', tr).value || 'UN', caE = caDoTamanho(p, tkE) || {};
+    itens.push({pid: pid, tk: tkE, qtd: q, ca: caE.ca || '', validadeCA: caE.validade || '', proximaTroca: p.vidaUtilDias ? addDays(data, +p.vidaUtilDias) : ''});
   });
   if(bad) return formError(bad);
   if(!itens.length) return formError('Adicione pelo menos um item.');
