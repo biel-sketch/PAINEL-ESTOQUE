@@ -36,7 +36,7 @@ var rolePermissions = {
 var USER_ROLES = [
   {user:'gabriel', email:'gabriel@loginserv.com.br', name:'Gabriel', role:'administrador'},
   {user:'carol',   email:'carol@loginserv.com.br',   name:'Carol',   role:'administrador'},
-  {user:'joao',    email:'joao@loginserv.com.br',    name:'João',    role:'almoxarife'}
+  {user:'joao',    email:'financeiro.2@loginserv.com.br',    name:'João',    role:'almoxarife'}
 ];
 
 // =====================================================================
