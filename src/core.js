@@ -27,7 +27,7 @@ var DB_ROOT = 'painel-estoque';
 // ---------------------------------------------------------------------
 var rolePermissions = {
   administrador: {label:'Administrador', initials:'AD', movimentar:true,  entregar:true,  produtos:true,  empregados:true,  cadastros:true,  solicitar:true,  comprar:true,  aprovar:true,  admin:true},
-  almoxarife:    {label:'Almoxarife',    initials:'AL', movimentar:true,  entregar:true,  produtos:true,  empregados:true,  cadastros:true,  solicitar:true,  comprar:false, aprovar:false, admin:false},
+  almoxarife:    {label:'Almoxarife',    initials:'AL', movimentar:true,  entregar:true,  produtos:true,  empregados:true,  cadastros:true,  solicitar:true,  comprar:true,  aprovar:false, admin:false},
   tecnico_sst:   {label:'Técnico de SST',initials:'TS', movimentar:false, entregar:true,  produtos:false, empregados:true,  cadastros:true,  solicitar:true,  comprar:false, aprovar:false, admin:false},
   comprador:     {label:'Comprador',     initials:'CP', movimentar:true,  entregar:false, produtos:true,  empregados:false, cadastros:true,  solicitar:true,  comprar:true,  aprovar:false, admin:false},
   aprovador:     {label:'Aprovador',     initials:'AP', movimentar:false, entregar:false, produtos:false, empregados:false, cadastros:false, solicitar:true,  comprar:false, aprovar:true,  admin:false},
@@ -35,8 +35,8 @@ var rolePermissions = {
 };
 var USER_ROLES = [
   {user:'gabriel', email:'gabriel@loginserv.com.br', name:'Gabriel', role:'administrador'},
-  {user:'carol',   email:'carol@loginserv.com.br',   name:'Carol',   role:'administrador'}
-  // Exemplo: {user:'joao', email:'almoxarifado@loginserv.com.br', name:'João', role:'almoxarife'},
+  {user:'carol',   email:'carol@loginserv.com.br',   name:'Carol',   role:'administrador'},
+  {user:'joao',    email:'joao@loginserv.com.br',    name:'João',    role:'almoxarife'}
 ];
 
 // =====================================================================
