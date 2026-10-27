@@ -202,3 +202,6 @@
   .rec-forn.done{color:var(--teal);font-size:12.5px;}
   .rec-forn .rec-loc{padding:6px 10px;margin-right:auto;}
   .ped-num, .ped-prev{width:100%;}
+#val-table tfoot td{border-top:1px solid var(--line-strong);border-bottom:none;font-size:12.5px;padding-top:9px;padding-bottom:9px;}
+#val-table tfoot tr + tr td{border-top:none;}
+.mc-qtd{width:80px;}
