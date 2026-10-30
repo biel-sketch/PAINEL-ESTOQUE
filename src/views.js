@@ -119,7 +119,7 @@ function setTab(view, t){
 
 // Preenche selects/datalists que dependem de cadastros (mantendo a seleção)
 function fillSelects(){
-  var empresas = vals(DB.empresas).sort(byName), locais = vals(DB.locais).sort(byName);
+  var empresas = vals(DB.empresas).sort(byName), locais = locaisAtivos().sort(byName);
   $$('.sel-empresas').forEach(function(s){
     var v = s.value;
     s.innerHTML = '<option value="">' + esc(s.dataset.all || 'Selecione...') + '</option>' + empresas.map(function(e){ return '<option value="'+e._id+'">'+esc(e.nome)+'</option>'; }).join('');
@@ -465,10 +465,11 @@ function renderCadastros(){
       return '<tr class="row-clickable" data-act="editar-cargo" data-id="'+g._id+'"><td>'+esc(g.nome)+'</td><td style="font-size:12px">'+((g.kit || []).map(function(k){ return esc(k.qtd + '× ' + nomeProd(k.pid)); }).join('<br>') || '<span style="color:var(--text-faint)">Sem kit definido</span>')+'</td><td class="num">'+n+'</td></tr>';
     }).join('') + '</tbody></table>' : emptyState('Cadastre os cargos e o kit de EPI de cada um. Na entrega, o kit é sugerido automaticamente.');
   } else {
-    var lo = vals(DB.locais).sort(byName);
-    h = lo.length ? '<table><thead><tr><th>Local</th><th>Descrição</th><th class="num">Unidades</th></tr></thead><tbody>' + lo.map(function(x){
-      var u = 0; Object.keys(DB.produtos).forEach(function(pid){ u += saldoProduto(pid, x._id); });
-      return '<tr class="row-clickable" data-act="editar-local" data-id="'+x._id+'"><td>'+esc(x.nome)+'</td><td>'+esc(x.descricao || '—')+'</td><td class="num">'+fmtN(u)+'</td></tr>';
+    var lo = locaisAtivos().sort(byName);
+    h = lo.length ? '<table><thead><tr><th>Local</th><th>Descrição</th><th class="num">Unidades</th><th></th></tr></thead><tbody>' + lo.map(function(x){
+      var u = unidadesNoLocal(x._id);
+      return '<tr class="row-clickable" data-act="editar-local" data-id="'+x._id+'"><td>'+esc(x.nome)+'</td><td>'+esc(x.descricao || '—')+'</td><td class="num">'+fmtN(u)+'</td>' +
+        '<td style="width:1%;white-space:nowrap"><button class="btn btn-sm" data-act="editar-local" data-id="'+x._id+'"'+(can('cadastros') ? '' : ' disabled')+'>Editar / excluir</button></td></tr>';
     }).join('') + '</tbody></table>' : emptyState('Nenhum local de estoque.');
   }
   $('#cad-table').innerHTML = h;

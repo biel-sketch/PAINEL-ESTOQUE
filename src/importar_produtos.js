@@ -109,7 +109,7 @@ function mostrarPreviewProdutos(linhas){
         '<td class="mono">'+(g.cas.length ? g.cas.map(function(c){ return '<div>'+esc(c.ca)+(c.tamanhos.length ? ' <span style="color:var(--text-faint)">'+esc(c.tamanhos.join(', '))+'</span>' : '')+'</div>'; }).join('') : '—')+'</td><td class="mono">'+(g.cas.map(function(c){ return '<div>'+fmtD(c.validade)+'</div>'; }).join('') || '—')+(g.caAuto ? ' <span class="pill blue" style="padding:0 6px;font-size:10px">base oficial</span>' : '')+'</td><td>'+vidaUtilTxt(g.vidaUtilDias)+'</td><td><div class="chips">'+(tams || '—')+'</div></td></tr>';
     }).join('') + '</tbody></table></div>' +
     (temSaldo ? '<div class="action-box"><label class="modal-check" style="margin-top:0"><input type="checkbox" id="ip-saldo" checked> Lançar as quantidades da planilha como <b>saldo inicial</b> ('+fmtN(unid)+' unidades)</label>' +
-      '<div class="modal-grid" style="margin-top:8px">' + field('No local de estoque', '<select id="ip-loc">'+optList(locaisOpts(), defaultLocal(), vals(DB.locais).length ? null : 'Cadastre um local em Cadastros')+'</select>') + '</div>' +
+      '<div class="modal-grid" style="margin-top:8px">' + field('No local de estoque', '<select id="ip-loc">'+optList(locaisOpts(), defaultLocal(), locaisAtivos().length ? null : 'Cadastre um local em Cadastros')+'</select>') + '</div>' +
       '<div class="hint" style="color:var(--amber);margin-top:6px">Use só na primeira carga: importar a mesma planilha de novo soma as quantidades outra vez.</div></div>' : '') +
     modalActions('Importar ' + importProds.length + ' produto(s)', 'confirmar-import-produtos'), 'wide');
 }

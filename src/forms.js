@@ -13,8 +13,9 @@ function closeModal(){ $('#modal').classList.remove('visible'); $('#modal-box').
 function formError(msg){ var e = $('#form-error'); if(e){ e.textContent = msg; e.style.display = msg ? 'block' : 'none'; } }
 function field(label, inner, cls, hint){ return '<div class="modal-field '+(cls || '')+'"><label>'+label+'</label>'+inner+(hint ? '<div class="hint">'+hint+'</div>' : '')+'</div>'; }
 function optList(list, sel, empty){ return (empty != null ? '<option value="">'+esc(empty)+'</option>' : '') + list.map(function(o){ return '<option value="'+esc(o[0])+'"'+(o[0] === sel ? ' selected' : '')+'>'+esc(o[1])+'</option>'; }).join(''); }
-function locaisOpts(sel){ return vals(DB.locais).sort(byName).map(function(l){ return [l._id, l.nome]; }); }
-function defaultLocal(){ var l = vals(DB.locais).sort(byName)[0]; return l ? l._id : ''; }
+function locaisAtivos(){ return vals(DB.locais).filter(function(l){ return !l.excluido; }); }
+function locaisOpts(sel){ return locaisAtivos().sort(byName).map(function(l){ return [l._id, l.nome]; }); }
+function defaultLocal(){ var l = locaisAtivos().sort(byName)[0]; return l ? l._id : ''; }
 function modalActions(saveLabel, saveAct, extra){ return '<div id="form-error" class="form-error"></div><div class="modal-actions">'+(extra || '')+'<button class="btn btn-ghost" data-act="fechar">Cancelar</button><button class="btn btn-primary" data-act="'+saveAct+'">'+saveLabel+'</button></div>'; }
 function busy(btn, on){ if(!btn) return; btn.disabled = on; if(on){ btn.dataset.txt = btn.textContent; btn.textContent = 'Salvando...'; } else if(btn.dataset.txt) btn.textContent = btn.dataset.txt; }
 
@@ -174,7 +175,7 @@ formHandlers['salvar-ajuste'] = function(btn){
 // =====================================================================
 function formTransferencia(){
   if(!can('movimentar')) return;
-  if(vals(DB.locais).length < 2){ toast('Cadastre pelo menos dois locais de estoque em Cadastros.', 'err'); return; }
+  if(locaisAtivos().length < 2){ toast('Cadastre pelo menos dois locais de estoque em Cadastros.', 'err'); return; }
   var lo = locaisOpts();
   openModal('<div class="modal-title">Transferência entre locais</div><div class="modal-grid">' +
     field('Produto', '<input id="f-prod" list="dl-produtos" placeholder="Digite para buscar...">', 'full') +
@@ -285,7 +286,7 @@ function confirmInline(el, txt){
 
 function verProduto(pid){
   var p = DB.produtos[pid]; if(!p) return;
-  var locs = vals(DB.locais).sort(byName), tams = tamanhosProduto(pid), ca = caStatus(p);
+  var locs = locaisAtivos().sort(byName), tams = tamanhosProduto(pid), ca = caStatus(p);
   var grid = '<table class="items-table"><thead><tr><th>Tamanho</th>' + locs.map(function(l){ return '<th class="num">'+esc(l.nome)+'</th>'; }).join('') + '<th class="num">Total</th></tr></thead><tbody>' +
     tams.map(function(k){ var cv = tamCAVencido(p, k); return '<tr'+(cv ? ' style="color:var(--red)"' : '')+'><td class="mono">'+esc(k === 'UN' ? 'Único' : k)+(cv ? ' <span class="pill red" style="padding:0 6px;font-size:10px">CA '+esc(caDoTamanho(p, k).ca)+' vencido</span>' : '')+'</td>' + locs.map(function(l){ return '<td class="num">'+saldoDe(pid, k, l._id)+'</td>'; }).join('') + '<td class="num"><b>'+saldoDe(pid, k)+'</b></td></tr>'; }).join('') + '</tbody></table>';
   var movs = vals(DB.movimentos).filter(function(m){ return m.pid === pid; }).sort(function(a, b){ return b.ts - a.ts; }).slice(0, 15);
@@ -535,10 +536,24 @@ function formLocal(id){
   var e = id ? DB.locais[id] : {};
   openModal('<div class="modal-title">'+(id ? 'Editar local' : 'Novo local de estoque')+'</div><div class="modal-grid">' +
     field('Nome', '<input id="c-nome" value="'+esc(e.nome || '')+'" placeholder="Ex.: Almoxarifado Garça">', 'full') + field('Descrição', '<input id="c-desc" value="'+esc(e.descricao || '')+'">', 'full') +
-    '</div>' + (id ? '<input type="hidden" id="c-id" value="'+id+'">' : '') + modalActions('Salvar', 'salvar-local'));
+    '</div>' + (id ? '<input type="hidden" id="c-id" value="'+id+'">' : '') + modalActions('Salvar', 'salvar-local', id ? '<button class="btn btn-danger" data-act="excluir-local" data-id="'+id+'" style="margin-right:auto">Excluir local</button>' : ''));
 }
+function unidadesNoLocal(id){ var u = 0; Object.keys(DB.produtos).forEach(function(pid){ u += saldoProduto(pid, id); }); return u; }
+formHandlers['excluir-local'] = function(el){
+  if(!can('cadastros')) return;
+  var id = el.dataset.id, l = DB.locais[id]; if(!l) return;
+  var u = unidadesNoLocal(id);
+  if(u !== 0) return formError('Este local ainda tem ' + fmtN(u) + ' unidade(s) em estoque. Transfira para outro local (ou dê baixa) antes de excluir.');
+  if(!confirmInline(el, 'Confirmar exclusão')) return;
+  var usado = vals(DB.movimentos).some(function(m){ return m.loc === id || m.locDest === id; }), p = {};
+  // com histórico: some das listas, mas o nome continua aparecendo nas movimentações antigas
+  if(usado){ p['locais/' + id + '/excluido'] = true; p['locais/' + id + '/excluidoEm'] = nowTs(); p['locais/' + id + '/excluidoPor'] = currentUser.name; }
+  else p['locais/' + id] = null;
+  save(p, 'Local excluído', l.nome).then(function(){ closeModal(); toast('Local "' + l.nome + '" excluído.'); }).catch(function(e){ formError(e.message); });
+};
 formHandlers['salvar-local'] = function(btn){
   var id = ($('#c-id') || {}).value, nome = $('#c-nome').value.trim(); if(!nome) return formError('Informe o nome.');
+  if(locaisAtivos().some(function(x){ return x._id !== id && norm(x.nome) === norm(nome); })) return formError('Já existe um local com esse nome.');
   var p = {}; p['locais/' + (id || store.key())] = {nome:nome, descricao:$('#c-desc').value.trim()};
   busy(btn, true); save(p, id ? 'Local alterado' : 'Local criado', nome).then(function(){ closeModal(); toast('Salvo.'); }).catch(function(e){ busy(btn, false); formError(e.message); });
 };

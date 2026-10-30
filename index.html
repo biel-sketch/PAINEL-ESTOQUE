@@ -444,7 +444,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-10-27-1546</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-10-30-1442</div>
     </div>
   </aside>
 
@@ -1047,7 +1047,7 @@ function setTab(view, t){
 
 // Preenche selects/datalists que dependem de cadastros (mantendo a seleção)
 function fillSelects(){
-  var empresas = vals(DB.empresas).sort(byName), locais = vals(DB.locais).sort(byName);
+  var empresas = vals(DB.empresas).sort(byName), locais = locaisAtivos().sort(byName);
   $$('.sel-empresas').forEach(function(s){
     var v = s.value;
     s.innerHTML = '<option value="">' + esc(s.dataset.all || 'Selecione...') + '</option>' + empresas.map(function(e){ return '<option value="'+e._id+'">'+esc(e.nome)+'</option>'; }).join('');
@@ -1393,10 +1393,11 @@ function renderCadastros(){
       return '<tr class="row-clickable" data-act="editar-cargo" data-id="'+g._id+'"><td>'+esc(g.nome)+'</td><td style="font-size:12px">'+((g.kit || []).map(function(k){ return esc(k.qtd + '× ' + nomeProd(k.pid)); }).join('<br>') || '<span style="color:var(--text-faint)">Sem kit definido</span>')+'</td><td class="num">'+n+'</td></tr>';
     }).join('') + '</tbody></table>' : emptyState('Cadastre os cargos e o kit de EPI de cada um. Na entrega, o kit é sugerido automaticamente.');
   } else {
-    var lo = vals(DB.locais).sort(byName);
-    h = lo.length ? '<table><thead><tr><th>Local</th><th>Descrição</th><th class="num">Unidades</th></tr></thead><tbody>' + lo.map(function(x){
-      var u = 0; Object.keys(DB.produtos).forEach(function(pid){ u += saldoProduto(pid, x._id); });
-      return '<tr class="row-clickable" data-act="editar-local" data-id="'+x._id+'"><td>'+esc(x.nome)+'</td><td>'+esc(x.descricao || '—')+'</td><td class="num">'+fmtN(u)+'</td></tr>';
+    var lo = locaisAtivos().sort(byName);
+    h = lo.length ? '<table><thead><tr><th>Local</th><th>Descrição</th><th class="num">Unidades</th><th></th></tr></thead><tbody>' + lo.map(function(x){
+      var u = unidadesNoLocal(x._id);
+      return '<tr class="row-clickable" data-act="editar-local" data-id="'+x._id+'"><td>'+esc(x.nome)+'</td><td>'+esc(x.descricao || '—')+'</td><td class="num">'+fmtN(u)+'</td>' +
+        '<td style="width:1%;white-space:nowrap"><button class="btn btn-sm" data-act="editar-local" data-id="'+x._id+'"'+(can('cadastros') ? '' : ' disabled')+'>Editar / excluir</button></td></tr>';
     }).join('') + '</tbody></table>' : emptyState('Nenhum local de estoque.');
   }
   $('#cad-table').innerHTML = h;
@@ -1483,8 +1484,9 @@ function closeModal(){ $('#modal').classList.remove('visible'); $('#modal-box').
 function formError(msg){ var e = $('#form-error'); if(e){ e.textContent = msg; e.style.display = msg ? 'block' : 'none'; } }
 function field(label, inner, cls, hint){ return '<div class="modal-field '+(cls || '')+'"><label>'+label+'</label>'+inner+(hint ? '<div class="hint">'+hint+'</div>' : '')+'</div>'; }
 function optList(list, sel, empty){ return (empty != null ? '<option value="">'+esc(empty)+'</option>' : '') + list.map(function(o){ return '<option value="'+esc(o[0])+'"'+(o[0] === sel ? ' selected' : '')+'>'+esc(o[1])+'</option>'; }).join(''); }
-function locaisOpts(sel){ return vals(DB.locais).sort(byName).map(function(l){ return [l._id, l.nome]; }); }
-function defaultLocal(){ var l = vals(DB.locais).sort(byName)[0]; return l ? l._id : ''; }
+function locaisAtivos(){ return vals(DB.locais).filter(function(l){ return !l.excluido; }); }
+function locaisOpts(sel){ return locaisAtivos().sort(byName).map(function(l){ return [l._id, l.nome]; }); }
+function defaultLocal(){ var l = locaisAtivos().sort(byName)[0]; return l ? l._id : ''; }
 function modalActions(saveLabel, saveAct, extra){ return '<div id="form-error" class="form-error"></div><div class="modal-actions">'+(extra || '')+'<button class="btn btn-ghost" data-act="fechar">Cancelar</button><button class="btn btn-primary" data-act="'+saveAct+'">'+saveLabel+'</button></div>'; }
 function busy(btn, on){ if(!btn) return; btn.disabled = on; if(on){ btn.dataset.txt = btn.textContent; btn.textContent = 'Salvando...'; } else if(btn.dataset.txt) btn.textContent = btn.dataset.txt; }
 
@@ -1644,7 +1646,7 @@ formHandlers['salvar-ajuste'] = function(btn){
 // =====================================================================
 function formTransferencia(){
   if(!can('movimentar')) return;
-  if(vals(DB.locais).length < 2){ toast('Cadastre pelo menos dois locais de estoque em Cadastros.', 'err'); return; }
+  if(locaisAtivos().length < 2){ toast('Cadastre pelo menos dois locais de estoque em Cadastros.', 'err'); return; }
   var lo = locaisOpts();
   openModal('<div class="modal-title">Transferência entre locais</div><div class="modal-grid">' +
     field('Produto', '<input id="f-prod" list="dl-produtos" placeholder="Digite para buscar...">', 'full') +
@@ -1755,7 +1757,7 @@ function confirmInline(el, txt){
 
 function verProduto(pid){
   var p = DB.produtos[pid]; if(!p) return;
-  var locs = vals(DB.locais).sort(byName), tams = tamanhosProduto(pid), ca = caStatus(p);
+  var locs = locaisAtivos().sort(byName), tams = tamanhosProduto(pid), ca = caStatus(p);
   var grid = '<table class="items-table"><thead><tr><th>Tamanho</th>' + locs.map(function(l){ return '<th class="num">'+esc(l.nome)+'</th>'; }).join('') + '<th class="num">Total</th></tr></thead><tbody>' +
     tams.map(function(k){ var cv = tamCAVencido(p, k); return '<tr'+(cv ? ' style="color:var(--red)"' : '')+'><td class="mono">'+esc(k === 'UN' ? 'Único' : k)+(cv ? ' <span class="pill red" style="padding:0 6px;font-size:10px">CA '+esc(caDoTamanho(p, k).ca)+' vencido</span>' : '')+'</td>' + locs.map(function(l){ return '<td class="num">'+saldoDe(pid, k, l._id)+'</td>'; }).join('') + '<td class="num"><b>'+saldoDe(pid, k)+'</b></td></tr>'; }).join('') + '</tbody></table>';
   var movs = vals(DB.movimentos).filter(function(m){ return m.pid === pid; }).sort(function(a, b){ return b.ts - a.ts; }).slice(0, 15);
@@ -2005,10 +2007,24 @@ function formLocal(id){
   var e = id ? DB.locais[id] : {};
   openModal('<div class="modal-title">'+(id ? 'Editar local' : 'Novo local de estoque')+'</div><div class="modal-grid">' +
     field('Nome', '<input id="c-nome" value="'+esc(e.nome || '')+'" placeholder="Ex.: Almoxarifado Garça">', 'full') + field('Descrição', '<input id="c-desc" value="'+esc(e.descricao || '')+'">', 'full') +
-    '</div>' + (id ? '<input type="hidden" id="c-id" value="'+id+'">' : '') + modalActions('Salvar', 'salvar-local'));
+    '</div>' + (id ? '<input type="hidden" id="c-id" value="'+id+'">' : '') + modalActions('Salvar', 'salvar-local', id ? '<button class="btn btn-danger" data-act="excluir-local" data-id="'+id+'" style="margin-right:auto">Excluir local</button>' : ''));
 }
+function unidadesNoLocal(id){ var u = 0; Object.keys(DB.produtos).forEach(function(pid){ u += saldoProduto(pid, id); }); return u; }
+formHandlers['excluir-local'] = function(el){
+  if(!can('cadastros')) return;
+  var id = el.dataset.id, l = DB.locais[id]; if(!l) return;
+  var u = unidadesNoLocal(id);
+  if(u !== 0) return formError('Este local ainda tem ' + fmtN(u) + ' unidade(s) em estoque. Transfira para outro local (ou dê baixa) antes de excluir.');
+  if(!confirmInline(el, 'Confirmar exclusão')) return;
+  var usado = vals(DB.movimentos).some(function(m){ return m.loc === id || m.locDest === id; }), p = {};
+  // com histórico: some das listas, mas o nome continua aparecendo nas movimentações antigas
+  if(usado){ p['locais/' + id + '/excluido'] = true; p['locais/' + id + '/excluidoEm'] = nowTs(); p['locais/' + id + '/excluidoPor'] = currentUser.name; }
+  else p['locais/' + id] = null;
+  save(p, 'Local excluído', l.nome).then(function(){ closeModal(); toast('Local "' + l.nome + '" excluído.'); }).catch(function(e){ formError(e.message); });
+};
 formHandlers['salvar-local'] = function(btn){
   var id = ($('#c-id') || {}).value, nome = $('#c-nome').value.trim(); if(!nome) return formError('Informe o nome.');
+  if(locaisAtivos().some(function(x){ return x._id !== id && norm(x.nome) === norm(nome); })) return formError('Já existe um local com esse nome.');
   var p = {}; p['locais/' + (id || store.key())] = {nome:nome, descricao:$('#c-desc').value.trim()};
   busy(btn, true); save(p, id ? 'Local alterado' : 'Local criado', nome).then(function(){ closeModal(); toast('Salvo.'); }).catch(function(e){ busy(btn, false); formError(e.message); });
 };
@@ -3138,7 +3154,7 @@ function mostrarPreviewProdutos(linhas){
         '<td class="mono">'+(g.cas.length ? g.cas.map(function(c){ return '<div>'+esc(c.ca)+(c.tamanhos.length ? ' <span style="color:var(--text-faint)">'+esc(c.tamanhos.join(', '))+'</span>' : '')+'</div>'; }).join('') : '—')+'</td><td class="mono">'+(g.cas.map(function(c){ return '<div>'+fmtD(c.validade)+'</div>'; }).join('') || '—')+(g.caAuto ? ' <span class="pill blue" style="padding:0 6px;font-size:10px">base oficial</span>' : '')+'</td><td>'+vidaUtilTxt(g.vidaUtilDias)+'</td><td><div class="chips">'+(tams || '—')+'</div></td></tr>';
     }).join('') + '</tbody></table></div>' +
     (temSaldo ? '<div class="action-box"><label class="modal-check" style="margin-top:0"><input type="checkbox" id="ip-saldo" checked> Lançar as quantidades da planilha como <b>saldo inicial</b> ('+fmtN(unid)+' unidades)</label>' +
-      '<div class="modal-grid" style="margin-top:8px">' + field('No local de estoque', '<select id="ip-loc">'+optList(locaisOpts(), defaultLocal(), vals(DB.locais).length ? null : 'Cadastre um local em Cadastros')+'</select>') + '</div>' +
+      '<div class="modal-grid" style="margin-top:8px">' + field('No local de estoque', '<select id="ip-loc">'+optList(locaisOpts(), defaultLocal(), locaisAtivos().length ? null : 'Cadastre um local em Cadastros')+'</select>') + '</div>' +
       '<div class="hint" style="color:var(--amber);margin-top:6px">Use só na primeira carga: importar a mesma planilha de novo soma as quantidades outra vez.</div></div>' : '') +
     modalActions('Importar ' + importProds.length + ' produto(s)', 'confirmar-import-produtos'), 'wide');
 }
