@@ -243,13 +243,12 @@ function formProduto(pid){
     field('Fabricante / marca', '<input id="p-fab" value="'+esc(p.fabricante || '')+'">') +
     '<datalist id="dl-grupos-prod">'+cmpGruposLista().map(function(g){ return '<option value="'+esc(g)+'">'; }).join('')+'</datalist>' +
     field('Vida útil (troca)', '<div style="display:flex;gap:8px"><input type="number" id="p-vu" min="0" value="'+vuN+'" style="width:90px"><select id="p-vuun">'+optList([['1','dias'],['30','meses'],['365','anos']], String(vuUn))+'</select></div>', '', 'Usada para calcular a próxima troca.') +
-    field('Estoque mínimo', '<input type="number" id="p-min" min="0" value="'+(p.estoqueMinimo || 0)+'">', '', 'Gera alerta quando o saldo total ficar abaixo.') +
     field('Tamanhos', '<input id="p-tams" value="'+esc((p.tamanhos || []).join(', '))+'" placeholder="Ex.: P, M, G, GG  ou  36, 38, 40">', 'full', 'Separe por vírgula. Deixe vazio para produto de tamanho único.') +
-    caEditorHtml(p) +
+    caEditorHtml(p) + minEditorHtml(p) +
     field('Custo médio (R$)', '<input id="p-custo" value="'+(p.custo ? String(p.custo).replace('.', ',') : '')+'">', '', 'Atualizado automaticamente nas entradas com custo.') +
     field('Situação', '<select id="p-ativo">'+optList([['1','Ativo'],['0','Inativo']], p.ativo === false ? '0' : '1')+'</select>') +
     '</div>' + modalActions('Salvar', 'salvar-produto', pid && can('admin') && !saldoProduto(pid) && !vals(DB.movimentos).some(function(m){ return m.pid === pid; }) ? '<button class="btn btn-danger" data-act="excluir-produto" data-id="'+pid+'" style="margin-right:auto">Excluir</button>' : '') + (pid ? '<input type="hidden" id="p-id" value="'+pid+'">' : ''));
-  wireCAProduto();
+  wireCAProduto(); wireMinEditor();
 }
 formHandlers['salvar-produto'] = function(btn){
   var pid = ($('#p-id') || {}).value, nome = $('#p-nome').value.trim();
@@ -260,10 +259,13 @@ formHandlers['salvar-produto'] = function(btn){
   var lc = lerCAsForm(tams); if(lc.erro) return formError(lc.erro);
   var rec = Object.assign({}, pid ? DB.produtos[pid] : {}, {
     nome: nome, categoria: $('#p-cat').value, unidade: $('#p-un').value || 'UN', cas: lc.cas,
-    fabricante: $('#p-fab').value.trim(), grupo: $('#p-grupo').value.trim(), vidaUtilDias: Math.round(num($('#p-vu').value) * +$('#p-vuun').value), estoqueMinimo: Math.floor(num($('#p-min').value)),
+    fabricante: $('#p-fab').value.trim(), grupo: $('#p-grupo').value.trim(), vidaUtilDias: Math.round(num($('#p-vu').value) * +$('#p-vuun').value), 
     tamanhos: tams, custo: num($('#p-custo').value), ativo: $('#p-ativo').value === '1', atualizadoEm: nowTs()
   });
   espelharCAs(rec);
+  var mins = lerGradeMinimos($('#p-min-grade'));
+  if(Object.keys(mins).length){ rec.minimos = mins; rec.estoqueMinimo = somaMinimos(mins); }
+  else { if(temMinimos(pid ? DB.produtos[pid] : {})) rec.estoqueMinimo = 0; rec.minimos = null; }
   delete rec._id;
   var id = pid || store.key(), paths = {}; paths['produtos/' + id] = rec;
   busy(btn, true);
@@ -288,12 +290,12 @@ function verProduto(pid){
   var p = DB.produtos[pid]; if(!p) return;
   var locs = locaisAtivos().sort(byName), tams = tamanhosProduto(pid), ca = caStatus(p);
   var grid = '<table class="items-table"><thead><tr><th>Tamanho</th>' + locs.map(function(l){ return '<th class="num">'+esc(l.nome)+'</th>'; }).join('') + '<th class="num">Total</th></tr></thead><tbody>' +
-    tams.map(function(k){ var cv = tamCAVencido(p, k); return '<tr'+(cv ? ' style="color:var(--red)"' : '')+'><td class="mono">'+esc(k === 'UN' ? 'Único' : k)+(cv ? ' <span class="pill red" style="padding:0 6px;font-size:10px">CA '+esc(caDoTamanho(p, k).ca)+' vencido</span>' : '')+'</td>' + locs.map(function(l){ return '<td class="num">'+saldoDe(pid, k, l._id)+'</td>'; }).join('') + '<td class="num"><b>'+saldoDe(pid, k)+'</b></td></tr>'; }).join('') + '</tbody></table>';
+    tams.map(function(k){ var cv = tamCAVencido(p, k); return '<tr'+(cv ? ' style="color:var(--red)"' : '')+'><td class="mono">'+esc(k === 'UN' ? 'Único' : k)+(cv ? ' <span class="pill red" style="padding:0 6px;font-size:10px">CA '+esc(caDoTamanho(p, k).ca)+' vencido</span>' : '')+'</td>' + locs.map(function(l){ var mn = minimoDe(p, k, l._id), sd = saldoDe(pid, k, l._id); return '<td class="num"'+(mn && sd < mn ? ' style="color:var(--amber)"' : '')+'>'+sd+(mn ? ' <span style="color:var(--text-faint);font-size:11px">/ mín '+mn+'</span>' : '')+'</td>'; }).join('') + '<td class="num"><b>'+saldoDe(pid, k)+'</b></td></tr>'; }).join('') + '</tbody></table>';
   var movs = vals(DB.movimentos).filter(function(m){ return m.pid === pid; }).sort(function(a, b){ return b.ts - a.ts; }).slice(0, 15);
   openModal('<div class="modal-title">'+esc(p.nome)+'</div><div class="info-grid">' +
     '<div><div class="lbl">Categoria</div>'+esc(p.categoria)+'</div><div><div class="lbl">CA</div>'+(produtoCAs(p).length ? produtoCAs(p).map(function(c){ var st = caStatusCA(c); return '<div>'+esc(c.ca)+' <span class="pill '+st.cls+'" style="padding:1px 7px;font-size:10.5px">'+st.txt+'</span>'+(produtoCAs(p).length > 1 ? ' <span style="color:var(--text-faint);font-size:11.5px">'+esc(tamsTxt(tamanhosDoCA(p, c)))+'</span>' : '')+'</div>'; }).join('') : '—')+'</div>' +
     '<div><div class="lbl">Validade CA</div>'+(produtoCAs(p).map(function(c){ return '<div>'+fmtD(c.validade)+'</div>'; }).join('') || '—')+'</div><div><div class="lbl">Vida útil</div>'+vidaUtilTxt(p.vidaUtilDias)+'</div>' +
-    '<div><div class="lbl">Saldo total</div>'+fmtN(saldoProduto(pid))+'</div><div><div class="lbl">Mínimo</div>'+(p.estoqueMinimo || '—')+'</div><div><div class="lbl">Custo médio</div>'+(p.custo ? fmtR(p.custo) : '—')+'</div><div><div class="lbl">Fabricante</div>'+esc(p.fabricante || '—')+'</div></div>' +
+    '<div><div class="lbl">Saldo total</div>'+fmtN(saldoProduto(pid))+'</div><div><div class="lbl">Mínimo</div>'+(minimoProduto(p) || '—')+(temMinimos(p) ? ' <span style="color:var(--text-faint);font-size:11.5px">(soma dos locais)</span>' : '')+'</div><div><div class="lbl">Custo médio</div>'+(p.custo ? fmtR(p.custo) : '—')+'</div><div><div class="lbl">Fabricante</div>'+esc(p.fabricante || '—')+'</div></div>' +
     '<div class="section-label">Saldo por tamanho e local</div>' + grid +
     '<div class="section-label">Últimas movimentações</div>' + (movs.length ? '<div class="table-wrap">' + movTable(movs, true) + '</div>' : '<div style="color:var(--text-faint);font-size:12.5px">Nenhuma.</div>') +
     '<div class="modal-actions"><button class="btn btn-ghost" data-act="fechar">Fechar</button>' +

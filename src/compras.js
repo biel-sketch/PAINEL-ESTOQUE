@@ -238,7 +238,10 @@ function formCompra(id, pidPrefill){
   var novo = !c;
   if(novo){
     var pp = pidPrefill ? DB.produtos[pidPrefill] : null;
-    c = {grupo: pp ? (pp.grupo || pp.categoria || '') : '', itens: pp ? [{item:pp.nome, pid:pidPrefill, qtd: +pp.estoqueMinimo ? Math.max(1, (+pp.estoqueMinimo) - saldoProduto(pidPrefill)) : 1, unidade:pp.unidade || 'UN', tk:''}] : [], cotacoes:[]};
+    c = {grupo: pp ? (pp.grupo || pp.categoria || '') : '', itens: pp ? (function(){
+      var rs = listaReposicao().filter(function(r){ return r.p._id === pidPrefill && r.comprar > 0; });
+      return rs.length ? rs.map(function(r){ return {item:pp.nome, pid:pidPrefill, qtd:r.comprar, unidade:pp.unidade || 'UN', tk:r.tk && r.tk !== 'UN' ? r.tk : ''}; }) : [{item:pp.nome, pid:pidPrefill, qtd:1, unidade:pp.unidade || 'UN', tk:''}];
+    })() : [], cotacoes:[]};
   }
   var e = novo ? 'cotacao' : cmpEtapa(c);
   var edSol = novo || cmpPodeEditarSolic(c), edCot = !novo && (e === 'cotacao' || e === 'reprovada') && can('comprar');

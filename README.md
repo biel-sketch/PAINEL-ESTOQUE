@@ -13,6 +13,7 @@ São 6 módulos com subabas no topo: **Início** · **Estoque** (Saldo, Moviment
 - **Devoluções**: o item volta ao estoque ou é descartado.
 - **Empregados**: itens em posse, histórico e importação da planilha do RH.
 - **Validade e CA**: trocas vencidas ou próximas (pela vida útil), CA vencido ou a vencer, com o **valor parado em CA vencido** (saldo × custo médio) e o valor geral do estoque.
+- **Estoque mínimo por local e tamanho**: cada local de estoque tem o seu mínimo para cada tamanho (no cadastro do produto, em "Definir mínimos" por local, ou pela planilha de mínimos importada em Produtos). Tamanhos abaixo do mínimo ficam marcados no saldo.
 - **Reposição do estoque mínimo**: lista o que falta para voltar ao mínimo, desconta o que já está em compra e estima o valor; exporta para Excel e cria de uma vez uma solicitação de compra por grupo (**Comprar todos os faltantes**).
 - **Vários CAs por produto**: cada CA cobre alguns tamanhos (ou os que sobram). Os tamanhos com CA vencido ficam em vermelho no saldo, o produto deixa de aparecer como OK e a entrega grava o CA do tamanho entregue. Na importação, cada linha pode ter seu CA.
 - **Consulta automática de CA**: ao digitar o nº do CA, o painel busca validade, situação, fabricante e "aprovado para" na base oficial CAEPI do Ministério do Trabalho. A base é baixada todo dia pelo workflow `.github/workflows/atualizar-caepi.yml` e publicada em `ca/`.

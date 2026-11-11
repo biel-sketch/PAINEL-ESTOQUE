@@ -12,7 +12,7 @@ formHandlers['importar-produtos'] = function(){
     '<table class="items-table"><thead><tr><th>Coluna</th><th>Obrigatória</th><th>Exemplo</th></tr></thead><tbody>' +
     [['Produto','Sim','BOTA BICO DE AÇO'],['CA','Não','28511'],['Validade CA','Não','25/11/2029 (se vazio, busca na base oficial pelo CA)'],['Categoria','Não','EPI, Uniforme ou Material (padrão: EPI)'],
      ['Grupo','Não','Luvas, Calçados, Uniforme (usado nas compras)'],['Fabricante','Não','MARLUVAS'],['Vida útil','Não','6 meses, 1 ano ou 180 (dias)'],['Tamanho','Não','40'],['Quantidade','Não','12 (vira saldo inicial, se você marcar)'],
-     ['Unidade','Não','UN, PAR, CX...'],['Estoque mínimo','Não','10'],['Custo','Não','45,90']]
+     ['Unidade','Não','UN, PAR, CX...'],['Estoque mínimo','Não','10 (do tamanho da linha, no local da linha)'],['Local','Não','Nome do local de estoque do mínimo (se vazio, escolhe na tela)'],['Custo','Não','45,90']]
     .map(function(r){ return '<tr><td><b>'+r[0]+'</b></td><td>'+r[1]+'</td><td style="color:var(--text-dim)">'+esc(r[2])+'</td></tr>'; }).join('') + '</tbody></table>' +
     '<div class="modal-sub" style="margin-top:10px">Produtos que já existem (mesmo nome) são atualizados; os novos são criados. Nada é gravado antes da conferência.</div>' +
     '<div class="modal-actions"><button class="btn" data-act="modelo-produtos" style="margin-right:auto">Baixar planilha modelo</button><button class="btn btn-ghost" data-act="fechar">Cancelar</button><button class="btn btn-primary" data-act="escolher-planilha-produtos">Escolher planilha</button></div>', 'wide');
@@ -20,10 +20,10 @@ formHandlers['importar-produtos'] = function(){
 formHandlers['escolher-planilha-produtos'] = function(){ importMode = 'produtos'; $('#file-import').value = ''; $('#file-import').click(); };
 formHandlers['modelo-produtos'] = function(){
   exportXlsx('modelo-produtos', [
-    {'Produto':'BOTA BICO DE AÇO', 'CA':'28511', 'Validade CA':'', 'Categoria':'EPI', 'Grupo':'Calçados', 'Fabricante':'', 'Vida útil':'1 ano', 'Tamanho':'40', 'Quantidade':6, 'Unidade':'PAR', 'Estoque mínimo':10, 'Custo':''},
-    {'Produto':'BOTA BICO DE AÇO', 'CA':'28511', 'Validade CA':'', 'Categoria':'EPI', 'Grupo':'Calçados', 'Fabricante':'', 'Vida útil':'1 ano', 'Tamanho':'42', 'Quantidade':4, 'Unidade':'PAR', 'Estoque mínimo':'', 'Custo':''},
-    {'Produto':'MASCARA PROTECAO PFF2', 'CA':'46677', 'Validade CA':'', 'Categoria':'EPI', 'Grupo':'Proteção respiratória', 'Fabricante':'', 'Vida útil':'15 dias', 'Tamanho':'', 'Quantidade':124, 'Unidade':'UN', 'Estoque mínimo':50, 'Custo':'2,50'},
-    {'Produto':'CALCA OPERACIONAL PRETA', 'CA':'', 'Validade CA':'', 'Categoria':'Uniforme', 'Grupo':'Uniforme', 'Fabricante':'', 'Vida útil':'6 meses', 'Tamanho':'M', 'Quantidade':35, 'Unidade':'UN', 'Estoque mínimo':'', 'Custo':''}
+    {'Produto':'BOTA BICO DE AÇO', 'CA':'28511', 'Validade CA':'', 'Categoria':'EPI', 'Grupo':'Calçados', 'Fabricante':'', 'Vida útil':'1 ano', 'Tamanho':'40', 'Quantidade':6, 'Unidade':'PAR', 'Estoque mínimo':10, 'Local':'', 'Custo':''},
+    {'Produto':'BOTA BICO DE AÇO', 'CA':'28511', 'Validade CA':'', 'Categoria':'EPI', 'Grupo':'Calçados', 'Fabricante':'', 'Vida útil':'1 ano', 'Tamanho':'42', 'Quantidade':4, 'Unidade':'PAR', 'Estoque mínimo':4, 'Local':'', 'Custo':''},
+    {'Produto':'MASCARA PROTECAO PFF2', 'CA':'46677', 'Validade CA':'', 'Categoria':'EPI', 'Grupo':'Proteção respiratória', 'Fabricante':'', 'Vida útil':'15 dias', 'Tamanho':'', 'Quantidade':124, 'Unidade':'UN', 'Estoque mínimo':50, 'Local':'', 'Custo':'2,50'},
+    {'Produto':'CALCA OPERACIONAL PRETA', 'CA':'', 'Validade CA':'', 'Categoria':'Uniforme', 'Grupo':'Uniforme', 'Fabricante':'', 'Vida útil':'6 meses', 'Tamanho':'M', 'Quantidade':35, 'Unidade':'UN', 'Estoque mínimo':'', 'Local':'', 'Custo':''}
   ]);
 };
 
@@ -50,7 +50,7 @@ function previewImportProdutos(rows){
     linhas++;
     var k = norm(nome);
     var g = grupos[k];
-    if(!g){ g = grupos[k] = {nome:nome, tamanhos:[], saldo:{}, qtdTotal:0, casMap:{}, casOrdem:[]}; ordem.push(k); }
+    if(!g){ g = grupos[k] = {nome:nome, tamanhos:[], saldo:{}, qtdTotal:0, casMap:{}, casOrdem:[], minRows:[]}; ordem.push(k); }
     function setIf(campo, v){ if((g[campo] == null || g[campo] === '') && v !== '' && v != null) g[campo] = v; }
     var ca = String(pick(r, ['ca','n ca','no ca','n. ca','nº ca','n° ca','numero ca','numero do ca','certificado de aprovacao'])).replace(/\D/g, '');
     var valR = toIso(pick(r, ['validade ca','validade do ca','vencimento ca','vencimento do ca','validade']));
@@ -59,11 +59,14 @@ function previewImportProdutos(rows){
     setIf('fabricante', String(pick(r, ['fabricante','marca'])).trim());
     var vu = parseVidaUtil(pick(r, ['vida util','vida util (dias)','vida util dias','periodicidade de troca','troca','periodicidade'])); if(vu) setIf('vidaUtilDias', vu);
     var un = String(pick(r, ['unidade','un','und','unid'])).trim().toUpperCase(); if(un) setIf('unidade', un);
-    var mn = pick(r, ['estoque minimo','minimo','est minimo','estoque min']); if(mn !== '') setIf('estoqueMinimo', Math.floor(num(mn)));
+    var mn = pick(r, ['estoque minimo','minimo','est minimo','estoque min']);
+    var locNome = String(pick(r, ['local','local de estoque','almoxarifado'])).trim();
     var cu = pick(r, ['custo','custo unitario','preco','preco unitario','valor unitario','valor']); if(cu !== '' && num(cu) > 0) setIf('custo', Math.round(num(cu) * 100) / 100);
     var tam = String(pick(r, ['tamanho','tam','grade','numeracao','numero'])).trim();
     var tk = tamKey(tam);
     if(tam && g.tamanhos.indexOf(tk) === -1) g.tamanhos.push(tk);
+    // estoque mínimo da linha: vale para o tamanho da linha, no local da linha (ou no escolhido na tela)
+    if(mn !== '') g.minRows.push({tk: tam ? tk : 'UN', v: Math.max(0, Math.floor(num(mn))), local: locNome});
     // cada linha pode ter seu CA: o tamanho da linha fica ligado a ele
     if(ca){
       var cm = g.casMap[ca]; if(!cm){ cm = g.casMap[ca] = {ca:ca, validade:'', tamanhos:[], todos:false}; g.casOrdem.push(ca); }
@@ -111,23 +114,47 @@ function mostrarPreviewProdutos(linhas){
     (temSaldo ? '<div class="action-box"><label class="modal-check" style="margin-top:0"><input type="checkbox" id="ip-saldo" checked> Lançar as quantidades da planilha como <b>saldo inicial</b> ('+fmtN(unid)+' unidades)</label>' +
       '<div class="modal-grid" style="margin-top:8px">' + field('No local de estoque', '<select id="ip-loc">'+optList(locaisOpts(), defaultLocal(), locaisAtivos().length ? null : 'Cadastre um local em Cadastros')+'</select>') + '</div>' +
       '<div class="hint" style="color:var(--amber);margin-top:6px">Use só na primeira carga: importar a mesma planilha de novo soma as quantidades outra vez.</div></div>' : '') +
+    minBoxHtml() +
     modalActions('Importar ' + importProds.length + ' produto(s)', 'confirmar-import-produtos'), 'wide');
 }
 
+function localPorNome(n){ var k = norm(n); var l = locaisAtivos().find(function(x){ return norm(x.nome) === k; }); return l ? l._id : ''; }
+function minBoxHtml(){
+  var rows = []; importProds.forEach(function(g){ rows = rows.concat(g.minRows); });
+  if(!rows.length) return '';
+  var comLocal = rows.filter(function(r){ return r.local; }), semLocal = rows.length - comLocal.length;
+  var desconhecidos = {}; comLocal.forEach(function(r){ if(!localPorNome(r.local)) desconhecidos[r.local] = 1; });
+  var dk = Object.keys(desconhecidos);
+  return '<div class="action-box"><label class="modal-check" style="margin-top:0"><input type="checkbox" id="ip-min" checked> Gravar o <b>estoque mínimo</b> da planilha ('+rows.length+' linha(s), por tamanho)</label>' +
+    (semLocal ? '<div class="modal-grid" style="margin-top:8px">' + field(comLocal.length ? 'Local para as linhas sem a coluna Local' : 'O mínimo vale para o local', '<select id="ip-min-loc">'+optList(locaisOpts(), defaultLocal(), locaisAtivos().length ? null : 'Cadastre um local em Cadastros')+'</select>') + '</div>' : '') +
+    (comLocal.length ? '<div class="hint" style="margin-top:6px">'+comLocal.length+' linha(s) com a coluna Local preenchida usam o local da própria linha.</div>' : '') +
+    (dk.length ? '<div class="hint" style="color:var(--red);margin-top:6px">Local não encontrado: '+esc(dk.join(', '))+'. Corrija o nome na planilha (igual ao cadastro de Locais) ou essas linhas serão ignoradas.</div>' : '') +
+    '<div class="hint" style="margin-top:6px">Cada local tem o seu mínimo por tamanho. Os mínimos de outros locais e tamanhos que não estão na planilha são mantidos.</div></div>';
+}
 formHandlers['confirmar-import-produtos'] = function(btn){
   var lancar = $('#ip-saldo') && $('#ip-saldo').checked, loc = lancar ? $('#ip-loc').value : '';
   if(lancar && !loc) return formError('Escolha o local de estoque (ou cadastre um em Cadastros → Locais).');
+  var gravarMin = $('#ip-min') && $('#ip-min').checked, minLoc = $('#ip-min-loc') ? $('#ip-min-loc').value : '';
+  if(gravarMin && $('#ip-min-loc') && !minLoc) return formError('Escolha o local do estoque mínimo.');
   var p = {}, ops = [], ids = {};
   importProds.forEach(function(g){
     var id = g.existenteId || store.key(); ids[g.nome] = id;
     var base = g.existenteId ? Object.assign({}, DB.produtos[id]) : {categoria:'EPI', unidade:'UN', ativo:true, estoqueMinimo:0, custo:0, vidaUtilDias:0, criadoEm:nowTs()};
     delete base._id;
     var rec = Object.assign(base, {nome: g.existenteId ? base.nome : g.nome, categoria: g.categoria || base.categoria, atualizadoEm: nowTs()});
-    ['fabricante','grupo','vidaUtilDias','unidade','estoqueMinimo','custo'].forEach(function(f){ if(g[f] !== undefined && g[f] !== '') rec[f] = g[f]; });
+    ['fabricante','grupo','vidaUtilDias','unidade','custo'].forEach(function(f){ if(g[f] !== undefined && g[f] !== '') rec[f] = g[f]; });
     var tams = (base.tamanhos || []).map(tamKey);
     g.tamanhos.forEach(function(t){ if(t !== 'UN' && tams.indexOf(t) === -1) tams.push(t); });
     rec.tamanhos = tams;
     if(g.cas.length){ rec.cas = g.cas.map(function(c){ return {ca:c.ca, validade:c.validade || '', situacao:c.situacao || '', verificadoEm:c.verificadoEm || '', tamanhos:c.tamanhos}; }); espelharCAs(rec); }
+    if(gravarMin && g.minRows.length){
+      var m = JSON.parse(JSON.stringify(rec.minimos || {})), mexeu = false;
+      g.minRows.forEach(function(r){
+        var l = r.local ? localPorNome(r.local) : minLoc; if(!l) return;
+        m[l] = m[l] || {}; if(r.v > 0) m[l][r.tk] = r.v; else delete m[l][r.tk]; if(!Object.keys(m[l]).length) delete m[l]; mexeu = true;
+      });
+      if(mexeu){ rec.minimos = Object.keys(m).length ? m : null; rec.estoqueMinimo = somaMinimos(m); }
+    }
     p['produtos/' + id] = rec;
     if(lancar) Object.keys(g.saldo).forEach(function(t){ ops.push({pid:id, tk:t, loc:loc, delta:g.saldo[t]}); });
   });

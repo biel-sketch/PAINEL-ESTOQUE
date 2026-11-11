@@ -182,7 +182,7 @@ function produtosCAAlerta(){
 }
 function produtosCAVencidoComSaldo(){ return vals(DB.produtos).filter(function(p){ return p.ativo !== false && saldoCAVencido(p) > 0; }); }
 function produtosAbaixoMinimo(loc){
-  return vals(DB.produtos).filter(function(p){ return p.ativo !== false && +p.estoqueMinimo > 0 && saldoProduto(p._id, loc) < +p.estoqueMinimo; });
+  return vals(DB.produtos).filter(function(p){ return p.ativo !== false && produtoAbaixoMinimo(p, loc); });
 }
 function movsPeriodo(de, ate){
   return vals(DB.movimentos).filter(function(m){ return (!de || m.data >= de) && (!ate || m.data <= ate); });
@@ -220,7 +220,10 @@ function renderDashboard(){
   var al = [];
   caVenc.slice(0, 4).forEach(function(p){ var vs = produtoCAs(p).filter(function(c){ return caStatusCA(c).cls === 'red'; }); al.push(['red', esc(p.nome), vs.map(function(c){ return 'CA ' + esc(c.ca) + ' vencido em ' + fmtD(c.validade); }).join(' · ') + ' · ' + saldoCAVencido(p) + ' em estoque', 'validade:ca']); });
   trocasVenc.slice(0, 4).forEach(function(x){ var e = DB.empregados[x.empregadoId] || {}; al.push(['red', esc(e.nome), esc(nomeProd(x.item.pid)) + ' — troca prevista ' + fmtD(x.item.proximaTroca), 'validade:trocas']); });
-  minimo.slice(0, 4).forEach(function(p){ al.push(['amber', esc(p.nome), 'Saldo ' + saldoProduto(p._id) + ' · mínimo ' + p.estoqueMinimo, 'validade:minimo']); });
+  minimo.slice(0, 4).forEach(function(p){
+    var fs = faltasMinimo().filter(function(f){ return f.p === p; });
+    al.push(['amber', esc(p.nome), fs.length === 1 && fs[0].antigo ? 'Saldo ' + fs[0].saldo + ' · mínimo ' + fs[0].min : fs.slice(0, 3).map(function(f){ return esc((f.tk && f.tk !== 'UN' ? f.tk + ' ' : '') + 'em ' + nomeLocal(f.loc)) + ': ' + f.saldo + '/' + f.min; }).join(' · ') + (fs.length > 3 ? ' · +' + (fs.length - 3) : ''), 'validade:minimo']);
+  });
   listaCAs().filter(function(x){ return x.st.cls === 'amber'; }).slice(0, 3).forEach(function(x){ al.push(['amber', esc(x.p.nome), 'CA ' + esc(x.c.ca) + ' vence em ' + fmtD(x.c.validade), 'validade:ca']); });
   var cmps = vals(DB.compras);
   var aguard = cmps.filter(function(c){ return cmpEtapa(c) === 'aguardando'; }).length;
@@ -258,7 +261,7 @@ function renderEstoque(){
     if(q && norm(p.nome + ' ' + cvsTxt(p) + ' ' + (p.fabricante || '')).indexOf(q) === -1) return false;
     var s = saldoProduto(p._id, loc);
     if(!zer && s <= 0) return false;
-    if(minOnly && !(+p.estoqueMinimo > 0 && s < +p.estoqueMinimo)) return false;
+    if(minOnly && !produtoAbaixoMinimo(p, loc)) return false;
     return true;
   }).sort(byName);
   var totU = 0, totV = 0, totSku = 0;
@@ -268,16 +271,16 @@ function renderEstoque(){
   $('#est-table').innerHTML = '<table><thead><tr><th>Produto</th><th>CA</th><th>Tamanhos / saldo</th><th class="num">Total</th><th class="num">Mínimo</th><th>Situação</th></tr></thead><tbody>' +
     rows.map(function(p){
       var s = saldoProduto(p._id, loc), cas = produtoCAs(p), sv = saldoCAVencido(p, loc);
-      var chips = tamanhosProduto(p._id).map(function(k){ var v = saldoDe(p._id, k, loc), venc = tamCAVencido(p, k); return (v || zer) ? '<span class="chip'+(v?'':' zero')+(venc?' chip-venc':'')+'"'+(venc ? ' title="CA '+esc((caDoTamanho(p, k) || {}).ca)+' vencido"' : '')+'>'+esc(tamLabel(k) === '—' ? 'UN' : k)+' <b>'+v+'</b></span>' : ''; }).join('');
+      var chips = tamanhosProduto(p._id).map(function(k){ var v = saldoDe(p._id, k, loc), venc = tamCAVencido(p, k), bm = !venc && tamAbaixoMinimo(p, k, loc), mnk = minimoDe(p, k, loc); return (v || zer || bm) ? '<span class="chip'+(v?'':' zero')+(venc?' chip-venc':'')+(bm?' chip-min':'')+'"'+(venc ? ' title="CA '+esc((caDoTamanho(p, k) || {}).ca)+' vencido"' : (mnk ? ' title="Mínimo '+mnk+'"' : ''))+'>'+esc(tamLabel(k) === '—' ? 'UN' : k)+' <b>'+v+'</b></span>' : ''; }).join('');
       var pills = [];
       if(sv > 0) pills.push('<span class="pill red">CA vencido' + (sv < s ? ' (' + fmtN(sv) + ' un)' : '') + '</span>');
-      if(+p.estoqueMinimo > 0 && s < +p.estoqueMinimo) pills.push('<span class="pill amber">Abaixo do mínimo</span>');
+      if(produtoAbaixoMinimo(p, loc)) pills.push('<span class="pill amber">Abaixo do mínimo</span>');
       if(!pills.length) pills.push(s <= 0 ? '<span class="pill gray">Zerado</span>' : '<span class="pill teal">OK</span>');
       var sit = '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">' + pills.join('') + '</div>';
       var caCol = cas.length ? cas.map(function(c){ var st = caStatusCA(c); return '<div style="margin-bottom:3px"><span class="mono">'+esc(c.ca)+'</span>'+(cas.length > 1 && (c.tamanhos || []).length ? ' <span class="sub" style="display:inline">'+esc(tamsTxt(c.tamanhos))+'</span>' : '')+'<span class="sub"><span class="pill '+st.cls+'" style="padding:1px 7px;font-size:10.5px">'+st.txt+'</span></span></div>'; }).join('') : '<span class="mono">—</span>';
       return '<tr class="row-clickable" data-act="ver-produto" data-id="'+p._id+'"><td>'+esc(p.nome)+'<span class="sub">'+esc(p.categoria || '')+(p.fabricante ? ' · ' + esc(p.fabricante) : '')+'</span></td>' +
         '<td>'+caCol+'</td>' +
-        '<td><div class="chips">'+chips+'</div></td><td class="num">'+fmtN(s)+'</td><td class="num">'+(p.estoqueMinimo ? fmtN(p.estoqueMinimo) : '—')+'</td><td>'+sit+'</td></tr>';
+        '<td><div class="chips">'+chips+'</div></td><td class="num">'+fmtN(s)+'</td><td class="num">'+(minimoProduto(p, loc) ? fmtN(minimoProduto(p, loc)) : '—')+'</td><td>'+sit+'</td></tr>';
     }).join('') + '</tbody></table>';
 }
 
@@ -333,7 +336,7 @@ function renderProdutos(){
       return '<tr class="row-clickable" data-act="editar-produto" data-id="'+p._id+'"><td>'+esc(p.nome)+(p.ativo === false ? ' <span class="pill gray">Inativo</span>' : '')+(p.fabricante ? '<span class="sub">'+esc(p.fabricante)+'</span>' : '')+'</td><td>'+esc(p.categoria || '')+(p.grupo ? '<span class="sub">'+esc(p.grupo)+'</span>' : '')+'</td>' +
         '<td class="mono">'+esc(cvsTxt(p) || '—')+'</td><td>'+(produtoCAs(p).length ? produtoCAs(p).map(function(c){ var st = caStatusCA(c); return '<div>'+fmtD(c.validade) + ' <span class="pill '+st.cls+'" style="padding:1px 7px;font-size:10.5px">'+st.txt+'</span></div>'; }).join('') : '—')+'</td>' +
         '<td>'+vidaUtilTxt(p.vidaUtilDias)+'</td><td><div class="chips">'+(p.tamanhos || []).map(function(t){ return '<span class="chip">'+esc(t)+'</span>'; }).join('')+'</div></td>' +
-        '<td class="num">'+(p.estoqueMinimo || '—')+'</td><td class="num">'+(p.custo ? fmtR(p.custo) : '—')+'</td><td class="num">'+fmtN(saldoProduto(p._id))+'</td></tr>';
+        '<td class="num">'+(minimoProduto(p) || '—')+'</td><td class="num">'+(p.custo ? fmtR(p.custo) : '—')+'</td><td class="num">'+fmtN(saldoProduto(p._id))+'</td></tr>';
     }).join('') + '</tbody></table><div class="tbl-foot">'+rows.length+' produtos</div>';
 }
 function vidaUtilTxt(d){
