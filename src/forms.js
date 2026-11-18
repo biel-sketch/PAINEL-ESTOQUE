@@ -327,7 +327,7 @@ function formEntrega(empId){
     '<div class="section-label" style="display:flex;align-items:center;justify-content:space-between">Itens <button class="btn btn-sm" data-act="carregar-kit">Carregar kit do cargo</button></div>' +
     '<table class="items-table"><thead><tr><th style="width:46%">Produto</th><th>Tamanho</th><th style="width:80px">Qtd</th><th>Próxima troca</th><th style="width:36px"></th></tr></thead><tbody id="e-itens"></tbody></table>' +
     '<button class="btn btn-sm" style="margin-top:8px" data-act="add-item-entrega">+ Adicionar item</button>' +
-    field('Observação', '<input id="e-obs">', 'full') +
+    '<div class="modal-grid">' + field('Observação', '<input id="e-obs">') + field('Responsável pela entrega', '<input id="e-resp" value="'+esc(currentUser.name || '')+'">', '', 'Nome que sai no termo.') + '</div>' +
     '<div class="hint" id="e-troca-hint" style="display:none;margin-top:8px">Troca por tamanho: o item do mesmo produto que está com o empregado volta ao estoque (em bom estado) e o termo de devolução sai junto com o de recebimento.</div>' +
     '<label class="modal-check"><input type="checkbox" id="e-print" checked> Imprimir o termo de recebimento para assinatura</label>' +
     modalActions('Registrar entrega', 'salvar-entrega'), 'wide');
@@ -421,11 +421,11 @@ formHandlers['salvar-entrega'] = function(btn){
     itens.forEach(function(i){ paths['movimentos/' + store.key()] = movRecord({data:data, tipo:'entrega', pid:i.pid, tk:i.tk, loc:loc, qtd:i.qtd, empregadoId:empId, entregaId:entId, custoUnit:(DB.produtos[i.pid] || {}).custo || undefined, motivo:$('#e-mot').value}); });
     // guarda o tamanho usado (calçado, calça, camisa, luva) para sugerir na próxima entrega
     itens.forEach(function(i){ if(i.tk && i.tk !== 'UN' && DB.produtos[i.pid]) paths['empregados/' + empId + '/tamanhos/' + grupoTamanho(DB.produtos[i.pid])] = i.tk; });
-    paths['entregas/' + entId] = {data:data, ts:nowTs(), empregadoId:empId, loc:loc, motivo:$('#e-mot').value, obs:$('#e-obs').value.trim(), itens:itens, usuario:currentUser.name};
+    paths['entregas/' + entId] = {data:data, ts:nowTs(), empregadoId:empId, loc:loc, motivo:$('#e-mot').value, obs:$('#e-obs').value.trim(), itens:itens, usuario:currentUser.name, responsavel:($('#e-resp').value.trim() || currentUser.name)};
     return save(paths, 'Entrega de EPI', (DB.empregados[empId] || {}).nome + ' — ' + itens.length + ' item(ns)').then(function(){ return entId; });
   }).then(function(entId){
     if(!trocas.length) return entId;
-    return registrarDevolucao(empId, 'Troca por tamanho', trocas.map(function(x){ return {entregaId:x.entregaId, idx:x.idx, qtd:x.aberto, cond:'reutilizar', loc:loc}; }), data, 'Troca por tamanho (entrega do novo tamanho no mesmo dia)').then(function(rd){ devId = rd && rd.id; return entId; });
+    return registrarDevolucao(empId, 'Troca por tamanho', trocas.map(function(x){ return {entregaId:x.entregaId, idx:x.idx, qtd:x.aberto, cond:'reutilizar', loc:loc}; }), data, 'Troca por tamanho (entrega do novo tamanho no mesmo dia)', $('#e-resp').value.trim()).then(function(rd){ devId = rd && rd.id; return entId; });
   }).then(function(entId){
     closeModal(); toast(trocas.length ? 'Troca registrada: item antigo devolvido ao estoque.' : 'Entrega registrada.');
     if(imprimir) setTimeout(function(){ doPrint(termoHtml(entId) + (devId ? '<div class="pr-break"></div>' + termoDevolucaoHtml(devId) : '')); }, 150);
@@ -464,7 +464,7 @@ function formDevolucao(entId, idx){
     field('Quantidade devolvida', '<input type="number" id="d-qtd" min="1" max="'+aberto+'" value="'+aberto+'">') +
     field('Condição', '<select id="d-cond">'+optList(COND_DEV, 'reutilizar')+'</select>') +
     field('Local (se voltar ao estoque)', '<select id="d-loc">'+optList(locaisOpts(), en.loc || defaultLocal())+'</select>') + field('Data', '<input type="date" id="d-data" value="'+today()+'">') +
-    field('Observação', '<input id="d-obs">', 'full') + '<input type="hidden" id="d-ent" value="'+entId+'"><input type="hidden" id="d-idx" value="'+idx+'"></div>' +
+    field('Observação', '<input id="d-obs">') + field('Responsável pelo recebimento', '<input id="d-resp" value="'+esc(currentUser.name || '')+'">') + '<input type="hidden" id="d-ent" value="'+entId+'"><input type="hidden" id="d-idx" value="'+idx+'"></div>' +
     '<label class="modal-check" id="d-print-wrap"><input type="checkbox" id="d-print" checked> Imprimir o termo de devolução</label>' + modalActions('Registrar devolução', 'salvar-devolucao'));
   $('#d-cond').addEventListener('change', function(){ var re = this.value === 'reutilizar'; $('#d-print-wrap').style.display = re ? '' : 'none'; $('#d-loc').disabled = !re; });
 }
@@ -475,7 +475,7 @@ formHandlers['salvar-devolucao'] = function(btn){
   var cond = $('#d-cond').value, loc = $('#d-loc').value, data = $('#d-data').value || today(), imprimir = $('#d-print').checked;
   if(cond === 'reutilizar' && !loc) return formError('Escolha o local para onde o item volta.');
   busy(btn, true);
-  registrarDevolucao(en.empregadoId, 'Devolução', [{entregaId:entId, idx:idx, qtd:q, cond:cond, loc:loc}], data, $('#d-obs').value.trim()).then(function(r){
+  registrarDevolucao(en.empregadoId, 'Devolução', [{entregaId:entId, idx:idx, qtd:q, cond:cond, loc:loc}], data, $('#d-obs').value.trim(), $('#d-resp').value.trim()).then(function(r){
     closeModal(); toast('Devolução registrada.'); fichaEmpregado(en.empregadoId);
     if(r && r.temTermo && imprimir) setTimeout(function(){ printTermoDevolucao(r.id); }, 150);
   }).catch(function(e){ busy(btn, false); formError(e.message); });
@@ -530,11 +530,11 @@ function fichaEmpregado(id){
       var cl = {}; COND_DEV.forEach(function(c){ cl[c[0]] = c[1].split(' — ')[0]; });
       return '<div class="section-label">Devoluções</div><table class="items-table"><thead><tr><th>Data</th><th>Itens</th><th>Motivo</th><th></th></tr></thead><tbody>' + devs.map(function(d){
         return '<tr><td class="mono">'+fmtD(d.data)+'</td><td style="font-size:12px">'+(d.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk !== 'UN' ? ' (' + i.tk + ')' : '')) + ' <span class="pill '+(i.cond === 'reutilizar' ? 'teal' : i.cond === 'descartar' ? 'gray' : 'red')+'" style="padding:0 6px;font-size:10px">'+esc(cl[i.cond] || i.cond)+'</span>'; }).join('<br>')+'</td><td style="font-size:12px">'+esc(d.motivo || '')+'</td>' +
-          '<td>'+(devTemTermo(d) ? '<button class="btn btn-sm" data-act="print-termo-dev" data-id="'+d._id+'">Termo</button>' : '<span class="sub" style="display:inline">sem termo</span>')+'</td></tr>';
+          '<td style="white-space:nowrap">'+(devTemTermo(d) ? '<button class="btn btn-sm" data-act="print-termo-dev" data-id="'+d._id+'">Termo</button> <button class="btn btn-sm" data-act="editar-resp" data-tipo="devolucoes" data-id="'+d._id+'"'+(can('entregar') ? '' : ' disabled')+'>Responsável</button>' : '<span class="sub" style="display:inline">sem termo</span>')+'</td></tr>';
       }).join('') + '</tbody></table>';
     })() +
     '<div class="section-label">Histórico de entregas</div>' + (hist.length ? '<table class="items-table"><thead><tr><th>Data</th><th>Itens</th><th>Motivo</th><th></th></tr></thead><tbody>' + hist.map(function(en){
-      return '<tr><td class="mono">'+fmtD(en.data)+'</td><td style="font-size:12px">'+(en.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk !== 'UN' ? ' (' + i.tk + ')' : '')) + (i.devolvido ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">dev. ' + i.devolvido + '</span>' : ''); }).join('<br>')+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'</td><td><button class="btn btn-sm" data-act="print-termo" data-id="'+en._id+'">Termo</button></td></tr>';
+      return '<tr><td class="mono">'+fmtD(en.data)+'</td><td style="font-size:12px">'+(en.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk !== 'UN' ? ' (' + i.tk + ')' : '')) + (i.devolvido ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">dev. ' + i.devolvido + '</span>' : ''); }).join('<br>')+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'<span class="sub">Resp.: '+esc(en.responsavel || en.usuario || '—')+'</span></td><td style="white-space:nowrap"><button class="btn btn-sm" data-act="print-termo" data-id="'+en._id+'">Termo</button> <button class="btn btn-sm" data-act="editar-resp" data-tipo="entregas" data-id="'+en._id+'"'+(can('entregar') ? '' : ' disabled')+' title="Editar o responsável que sai no termo">Responsável</button></td></tr>';
     }).join('') + '</tbody></table>' : '<div style="color:var(--text-faint);font-size:12.5px">Nenhuma entrega registrada.</div>') +
     '<div class="modal-actions"><button class="btn btn-ghost" data-act="fechar">Fechar</button>' +
     (can('empregados') ? '<button class="btn" data-act="editar-empregado" data-id="'+id+'">Editar</button>' : '') +
