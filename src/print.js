@@ -21,7 +21,8 @@ function termoHtml(entId){
     '<table class="pr-table"><thead><tr><th>Qtd</th><th>Descrição</th><th>Tam.</th><th>CA</th><th>Validade CA</th><th>Próxima troca</th></tr></thead><tbody>' +
     (en.itens || []).map(function(i){ return '<tr><td>'+i.qtd+'</td><td>'+esc(nomeProd(i.pid))+'</td><td>'+esc(tamLabel(i.tk))+'</td><td>'+esc(i.ca || '—')+'</td><td>'+fmtD(i.validadeCA)+'</td><td>'+fmtD(i.proximaTroca)+'</td></tr>'; }).join('') +
     '</tbody></table><div><b>Data da entrega:</b> '+fmtD(en.data)+' &nbsp; <b>Motivo:</b> '+esc(en.motivo || '')+(en.obs ? ' &nbsp; <b>Obs.:</b> ' + esc(en.obs) : '')+'</div>' +
-    '<div class="pr-sign"><div>'+(en.assinatura ? '<img src="'+en.assinatura+'" alt="">' : '<br><br>')+esc(e.nome)+'<br>Empregado</div><div><br><br>'+esc(en.usuario || '')+'<br>Responsável pela entrega</div></div>';
+    '<div class="pr-sign"><div>'+(en.assinatura ? '<img src="'+en.assinatura+'" alt="">' : '<br><br>')+esc(e.nome)+'<br>Empregado</div><div><br><br>'+esc(en.usuario || '')+'<br>Responsável pela entrega</div></div>' +
+    possePrintHtml(en.empregadoId);
 }
 function doPrint(html){
   $('#print-area').innerHTML = html;

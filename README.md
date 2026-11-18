@@ -10,7 +10,10 @@ São 6 módulos com subabas no topo: **Início** · **Estoque** (Saldo, Moviment
 - **Importação de produtos/EPIs** por planilha (com modelo): cria ou atualiza produtos, junta tamanhos, completa a validade do CA pela base oficial e, opcionalmente, lança as quantidades como saldo inicial.
 - **Movimentações**: entrada (NF, fornecedor e custo, com custo médio automático), ajuste e inventário, transferência entre locais e baixa.
 - **Entregas de EPI**: kit sugerido pelo cargo, tamanho de calçado/calça/camisa/luva guardado a cada entrega e sugerido na próxima, bloqueio de saldo insuficiente e termo de recebimento (NR-6) impresso para assinatura.
-- **Devoluções**: o item volta ao estoque ou é descartado.
+- **Devoluções**: em bom estado (volta ao estoque), gasto/sem condições (descarte) ou não devolvido. Só a devolução em bom estado gera o **termo de devolução**.
+- **Desligamento**: botão "Desligar e devolver EPIs" (ou mudar a situação para Desligado) lista tudo o que está em posse para registrar a devolução e imprimir o termo.
+- **Troca por tamanho**: motivo de entrega que devolve ao estoque o item do mesmo produto e imprime o termo de recebimento junto com o de devolução.
+- **Termo de recebimento**: além dos itens entregues, lista todos os EPIs e uniformes em posse do empregado.
 - **Empregados**: itens em posse, histórico e importação da planilha do RH.
 - **Validade e CA**: trocas vencidas ou próximas (pela vida útil), CA vencido ou a vencer, com o **valor parado em CA vencido** (saldo × custo médio) e o valor geral do estoque.
 - **Estoque mínimo por local e tamanho**: cada local de estoque tem o seu mínimo para cada tamanho (no cadastro do produto, em "Definir mínimos" por local, ou pela planilha de mínimos importada em Produtos). Tamanhos abaixo do mínimo ficam marcados no saldo.

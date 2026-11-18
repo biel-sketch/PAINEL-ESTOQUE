@@ -368,6 +368,10 @@
 .chip.chip-min b{color:#FBBF24;}
 .min-grade input.min-in{width:64px;padding:6px 8px;text-align:right;}
 .min-grade td{padding:4px 6px;}
+@media print{
+  .pr-sub{font-weight:bold;margin:22px 0 4px;font-size:11.5px;}
+}
+.pr-sub{font-weight:bold;margin:22px 0 4px;}
 </style>
 </head>
 <body>
@@ -448,7 +452,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         <span class="nav-label">Sair</span>
       </button>
-      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-11-1549</div>
+      <div style="text-align:center;font-size:9px;color:var(--text-faint);margin-top:8px;opacity:0.6;">build 2026-11-18-1448</div>
     </div>
   </aside>
 
@@ -678,7 +682,7 @@ var USER_ROLES = [
 // HELPERS
 // =====================================================================
 var FB_ON = !!(firebaseConfig.apiKey && firebaseConfig.apiKey !== 'COLE_AQUI' && firebaseConfig.databaseURL);
-var COLS = ['produtos','saldos','movimentos','entregas','empregados','empresas','cargos','locais','compras','clientes','config','logs'];
+var COLS = ['produtos','saldos','movimentos','entregas','devolucoes','empregados','empresas','cargos','locais','compras','clientes','config','logs'];
 var DB_LOADED = {};
 var DB = {}; COLS.forEach(function(c){ DB[c] = {}; });
 
@@ -718,9 +722,10 @@ var MOV_TIPOS = {
   transf_entrada:{label:'Transf. entrada',cls:'gray', sinal: 1},
   baixa:         {label:'Baixa',         cls:'red',   sinal:-1},
   devol_descarte:{label:'Devolução (descarte)', cls:'gray', sinal:0},
+  nao_devolvido: {label:'Não devolvido', cls:'red', sinal:0},
   carga_inicial: {label:'Saldo inicial', cls:'gray',  sinal: 1}
 };
-var MOTIVOS_ENTREGA = ['Primeira entrega (admissão)','Troca por desgaste','Troca por vencimento da vida útil','Perda / extravio','Dano / quebra','Mudança de função','Outros'];
+var MOTIVOS_ENTREGA = ['Primeira entrega (admissão)','Troca por tamanho','Troca por desgaste','Troca por vencimento da vida útil','Perda / extravio','Dano / quebra','Mudança de função','Outros'];
 var MOTIVOS_BAIXA = ['CA vencido','Produto danificado','Perda / extravio','Descarte de devolução','Validade do produto vencida','Outros'];
 var MOTIVOS_AJUSTE = ['Inventário / contagem','Correção de lançamento','Outros'];
 
@@ -1096,7 +1101,7 @@ function itensEmPosse(empId){
     if(en.cancelada || (empId && en.empregadoId !== empId)) return;
     (en.itens || []).forEach(function(it, idx){
       if(!it) return;
-      var aberto = (+it.qtd || 0) - (+it.devolvido || 0);
+      var aberto = (+it.qtd || 0) - (+it.devolvido || 0) - (+it.naoDevolvido || 0);
       if(aberto > 0 && !it.substituidoPor) out.push({entregaId: en._id, idx: idx, empregadoId: en.empregadoId, data: en.data, item: it, aberto: aberto});
     });
   });
@@ -1522,6 +1527,7 @@ function handleAction(a, el){
     case 'editar-cargo': formCargo(id); break;
     case 'editar-local': formLocal(id); break;
     case 'print-termo': printTermo(id); break;
+    case 'print-termo-dev': printTermoDevolucao(id); break;
     case 'salvar-config': salvarConfig(); break;
     case 'backup': downloadBackup(); break;
     case 'importar-empregados': importMode = 'empregados'; $('#file-import').value = ''; $('#file-import').click(); break;
@@ -1806,10 +1812,12 @@ function formEntrega(empId){
     '<table class="items-table"><thead><tr><th style="width:46%">Produto</th><th>Tamanho</th><th style="width:80px">Qtd</th><th>Próxima troca</th><th style="width:36px"></th></tr></thead><tbody id="e-itens"></tbody></table>' +
     '<button class="btn btn-sm" style="margin-top:8px" data-act="add-item-entrega">+ Adicionar item</button>' +
     field('Observação', '<input id="e-obs">', 'full') +
+    '<div class="hint" id="e-troca-hint" style="display:none;margin-top:8px">Troca por tamanho: o item do mesmo produto que está com o empregado volta ao estoque (em bom estado) e o termo de devolução sai junto com o de recebimento.</div>' +
     '<label class="modal-check"><input type="checkbox" id="e-print" checked> Imprimir o termo de recebimento para assinatura</label>' +
     modalActions('Registrar entrega', 'salvar-entrega'), 'wide');
   onPick($('#e-emp'), entregaEmpChanged);
   $('#e-data').addEventListener('change', function(){ $$('#e-itens tr').forEach(function(tr){ refreshItemEntrega(tr); }); });
+  $('#e-mot').addEventListener('change', function(){ $('#e-troca-hint').style.display = this.value === 'Troca por tamanho' ? '' : 'none'; });
   $('#e-loc').addEventListener('change', function(){ $$('#e-itens tr').forEach(function(tr){ refreshItemEntrega(tr); }); });
   entregaEmpChanged();
   if(e && e.cargoId && (DB.cargos[e.cargoId] || {}).kit && itensEmPosse(empId).length === 0) carregarKit();
@@ -1884,7 +1892,11 @@ formHandlers['salvar-entrega'] = function(btn){
   });
   if(bad) return formError(bad);
   if(!itens.length) return formError('Adicione pelo menos um item.');
-  var imprimir = $('#e-print').checked;
+  var imprimir = $('#e-print').checked, motivo = $('#e-mot').value;
+  // troca por tamanho: o item do mesmo produto que está com o empregado volta ao estoque (bom estado) e gera termo de devolução
+  var trocas = motivo === 'Troca por tamanho' ? itensEmPosse(empId).filter(function(x){ return itens.some(function(i){ return i.pid === x.item.pid; }); }) : [];
+  if(motivo === 'Troca por tamanho' && !trocas.length) return formError('Troca por tamanho: o empregado não tem nenhum destes produtos em posse para devolver. Use outro motivo.');
+  var devId = null;
   busy(btn, true);
   applyStock(itens.map(function(i){ return {pid:i.pid, tk:i.tk, loc:loc, delta:-i.qtd}; })).then(function(){
     var entId = store.key(), paths = {};
@@ -1895,7 +1907,13 @@ formHandlers['salvar-entrega'] = function(btn){
     itens.forEach(function(i){ if(i.tk && i.tk !== 'UN' && DB.produtos[i.pid]) paths['empregados/' + empId + '/tamanhos/' + grupoTamanho(DB.produtos[i.pid])] = i.tk; });
     paths['entregas/' + entId] = {data:data, ts:nowTs(), empregadoId:empId, loc:loc, motivo:$('#e-mot').value, obs:$('#e-obs').value.trim(), itens:itens, usuario:currentUser.name};
     return save(paths, 'Entrega de EPI', (DB.empregados[empId] || {}).nome + ' — ' + itens.length + ' item(ns)').then(function(){ return entId; });
-  }).then(function(entId){ closeModal(); toast('Entrega registrada.'); if(imprimir) setTimeout(function(){ printTermo(entId); }, 150); })
+  }).then(function(entId){
+    if(!trocas.length) return entId;
+    return registrarDevolucao(empId, 'Troca por tamanho', trocas.map(function(x){ return {entregaId:x.entregaId, idx:x.idx, qtd:x.aberto, cond:'reutilizar', loc:loc}; }), data, 'Troca por tamanho (entrega do novo tamanho no mesmo dia)').then(function(rd){ devId = rd && rd.id; return entId; });
+  }).then(function(entId){
+    closeModal(); toast(trocas.length ? 'Troca registrada: item antigo devolvido ao estoque.' : 'Entrega registrada.');
+    if(imprimir) setTimeout(function(){ doPrint(termoHtml(entId) + (devId ? '<div class="pr-break"></div>' + termoDevolucaoHtml(devId) : '')); }, 150);
+  })
     .catch(function(e){ busy(btn, false); formError(e.message); });
 };
 
@@ -1928,23 +1946,23 @@ function formDevolucao(entId, idx){
   var aberto = it.qtd - (it.devolvido || 0);
   openModal('<div class="modal-title">Devolução</div><div class="modal-sub">'+esc((DB.empregados[en.empregadoId] || {}).nome)+' — '+esc(nomeProd(it.pid))+(it.tk !== 'UN' ? ' ('+esc(it.tk)+')' : '')+', entregue em '+fmtD(en.data)+'</div><div class="modal-grid">' +
     field('Quantidade devolvida', '<input type="number" id="d-qtd" min="1" max="'+aberto+'" value="'+aberto+'">') +
-    field('Condição', '<select id="d-cond"><option value="reutilizar">Em bom estado — volta ao estoque</option><option value="descartar">Danificado — descartar</option></select>') +
+    field('Condição', '<select id="d-cond">'+optList(COND_DEV, 'reutilizar')+'</select>') +
     field('Local (se voltar ao estoque)', '<select id="d-loc">'+optList(locaisOpts(), en.loc || defaultLocal())+'</select>') + field('Data', '<input type="date" id="d-data" value="'+today()+'">') +
-    field('Observação', '<input id="d-obs">', 'full') + '<input type="hidden" id="d-ent" value="'+entId+'"><input type="hidden" id="d-idx" value="'+idx+'"></div>' + modalActions('Registrar devolução', 'salvar-devolucao'));
+    field('Observação', '<input id="d-obs">', 'full') + '<input type="hidden" id="d-ent" value="'+entId+'"><input type="hidden" id="d-idx" value="'+idx+'"></div>' +
+    '<label class="modal-check" id="d-print-wrap"><input type="checkbox" id="d-print" checked> Imprimir o termo de devolução</label>' + modalActions('Registrar devolução', 'salvar-devolucao'));
+  $('#d-cond').addEventListener('change', function(){ var re = this.value === 'reutilizar'; $('#d-print-wrap').style.display = re ? '' : 'none'; $('#d-loc').disabled = !re; });
 }
 formHandlers['salvar-devolucao'] = function(btn){
   var entId = $('#d-ent').value, idx = +$('#d-idx').value, en = DB.entregas[entId], it = en.itens[idx];
-  var q = Math.floor(num($('#d-qtd').value)), aberto = it.qtd - (it.devolvido || 0);
+  var q = Math.floor(num($('#d-qtd').value)), aberto = it.qtd - (it.devolvido || 0) - (it.naoDevolvido || 0);
   if(q <= 0 || q > aberto) return formError('Quantidade deve ser entre 1 e ' + aberto + '.');
-  var reut = $('#d-cond').value === 'reutilizar', loc = $('#d-loc').value, data = $('#d-data').value || today();
+  var cond = $('#d-cond').value, loc = $('#d-loc').value, data = $('#d-data').value || today(), imprimir = $('#d-print').checked;
+  if(cond === 'reutilizar' && !loc) return formError('Escolha o local para onde o item volta.');
   busy(btn, true);
-  (reut ? applyStock([{pid:it.pid, tk:it.tk, loc:loc, delta:q}]) : Promise.resolve()).then(function(){
-    var p = {};
-    p['entregas/' + entId + '/itens/' + idx + '/devolvido'] = (it.devolvido || 0) + q;
-    // descartado: registra a devolução sem somar ao estoque
-    p['movimentos/' + store.key()] = movRecord({data:data, tipo: reut ? 'devolucao' : 'devol_descarte', pid:it.pid, tk:it.tk, loc: reut ? loc : (en.loc || loc), qtd:q, empregadoId:en.empregadoId, entregaId:entId, motivo: reut ? 'Devolução (reutilizável)' : 'Devolvido e descartado', obs:$('#d-obs').value.trim()});
-    return save(p, 'Devolução', (DB.empregados[en.empregadoId] || {}).nome + ' — ' + q + '× ' + nomeProd(it.pid) + (reut ? '' : ' (descartado)'));
-  }).then(function(){ closeModal(); toast('Devolução registrada.'); fichaEmpregado(en.empregadoId); }).catch(function(e){ busy(btn, false); formError(e.message); });
+  registrarDevolucao(en.empregadoId, 'Devolução', [{entregaId:entId, idx:idx, qtd:q, cond:cond, loc:loc}], data, $('#d-obs').value.trim()).then(function(r){
+    closeModal(); toast('Devolução registrada.'); fichaEmpregado(en.empregadoId);
+    if(r && r.temTermo && imprimir) setTimeout(function(){ printTermoDevolucao(r.id); }, 150);
+  }).catch(function(e){ busy(btn, false); formError(e.message); });
 };
 
 // =====================================================================
@@ -1971,15 +1989,17 @@ formHandlers['salvar-empregado'] = function(btn){
   var rec = Object.assign({}, id ? DB.empregados[id] : {}, {nome:nome, cpf:$('#m-cpf').value.trim(), empresaId:$('#m-emp').value, cliente:$('#m-cli').value.trim(), cargoId:$('#m-car').value, admissao:$('#m-adm').value,
     ativo:$('#m-ativo').value === '1', atualizadoEm:nowTs()});
   delete rec._id;
+  var desligando = id && DB.empregados[id].ativo !== false && rec.ativo === false;
+  if(desligando) rec.ativo = true; // o desligamento é concluído na tela de devolução
   var key = id || store.key(), p = {}; p['empregados/' + key] = rec;
   busy(btn, true);
-  save(p, id ? 'Empregado alterado' : 'Empregado criado', nome).then(function(){ closeModal(); toast('Empregado salvo.'); if(id) fichaEmpregado(id); }).catch(function(e){ busy(btn, false); formError(e.message); });
+  save(p, id ? 'Empregado alterado' : 'Empregado criado', nome).then(function(){ closeModal(); if(desligando){ formDesligamento(id); return; } toast('Empregado salvo.'); if(id) fichaEmpregado(id); }).catch(function(e){ busy(btn, false); formError(e.message); });
 };
 function fichaEmpregado(id){
   var e = DB.empregados[id]; if(!e) return;
   var t = e.tamanhos || {}, posse = itensEmPosse(id);
   var hist = vals(DB.entregas).filter(function(en){ return en.empregadoId === id && !en.cancelada; }).sort(function(a, b){ return b.ts - a.ts; });
-  openModal('<div class="modal-title">'+esc(e.nome)+(e.ativo === false ? ' <span class="pill gray">Desligado</span>' : '')+'</div><div class="info-grid">' +
+  openModal('<div class="modal-title">'+esc(e.nome)+(e.ativo === false ? ' <span class="pill gray">Desligado'+(e.desligadoEm ? ' em ' + fmtD(e.desligadoEm) : '')+'</span>' : '')+'</div><div class="info-grid">' +
     '<div><div class="lbl">Empresa</div>'+esc(nomeEmpresa(e.empresaId))+'</div><div><div class="lbl">Cliente</div>'+esc(e.cliente || '—')+'</div><div><div class="lbl">Cargo</div>'+esc(nomeCargo(e.cargoId))+'</div><div><div class="lbl">Admissão</div>'+fmtD(e.admissao)+'</div>' +
     '<div><div class="lbl">CPF</div>'+esc(e.cpf || '—')+'</div><div style="grid-column:span 3"><div class="lbl">Tamanhos (guardados nas entregas)</div>'+(tamanhosTxt(e) || '<span style="color:var(--text-faint)">Serão guardados na primeira entrega</span>')+'</div></div>' +
     '<div class="section-label">Itens em posse</div>' + (posse.length ? '<table class="items-table"><thead><tr><th>Item</th><th>Tam.</th><th class="num">Qtd</th><th>CA</th><th>Entregue</th><th>Troca prevista</th><th></th></tr></thead><tbody>' + posse.map(function(x){
@@ -1988,11 +2008,21 @@ function fichaEmpregado(id){
         '<td>'+(x.item.proximaTroca ? fmtD(x.item.proximaTroca) + ' <span class="pill '+(d < 0 ? 'red' : d <= +cfg('diasAlertaTroca', 15) ? 'amber' : 'gray')+'" style="padding:1px 7px;font-size:10.5px">'+(d < 0 ? 'vencida' : d + 'd')+'</span>' : '—')+'</td>' +
         '<td><button class="btn btn-sm" data-act="devolver" data-ent="'+x.entregaId+'" data-idx="'+x.idx+'"'+(can('entregar') ? '' : ' disabled')+'>Devolver</button></td></tr>';
     }).join('') + '</tbody></table>' : '<div style="color:var(--text-faint);font-size:12.5px">Nenhum item em posse.</div>') +
+    (function(){
+      var devs = vals(DB.devolucoes || {}).filter(function(d){ return d.empregadoId === id; }).sort(function(a, b){ return b.ts - a.ts; });
+      if(!devs.length) return '';
+      var cl = {}; COND_DEV.forEach(function(c){ cl[c[0]] = c[1].split(' — ')[0]; });
+      return '<div class="section-label">Devoluções</div><table class="items-table"><thead><tr><th>Data</th><th>Itens</th><th>Motivo</th><th></th></tr></thead><tbody>' + devs.map(function(d){
+        return '<tr><td class="mono">'+fmtD(d.data)+'</td><td style="font-size:12px">'+(d.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk !== 'UN' ? ' (' + i.tk + ')' : '')) + ' <span class="pill '+(i.cond === 'reutilizar' ? 'teal' : i.cond === 'descartar' ? 'gray' : 'red')+'" style="padding:0 6px;font-size:10px">'+esc(cl[i.cond] || i.cond)+'</span>'; }).join('<br>')+'</td><td style="font-size:12px">'+esc(d.motivo || '')+'</td>' +
+          '<td>'+(devTemTermo(d) ? '<button class="btn btn-sm" data-act="print-termo-dev" data-id="'+d._id+'">Termo</button>' : '<span class="sub" style="display:inline">sem termo</span>')+'</td></tr>';
+      }).join('') + '</tbody></table>';
+    })() +
     '<div class="section-label">Histórico de entregas</div>' + (hist.length ? '<table class="items-table"><thead><tr><th>Data</th><th>Itens</th><th>Motivo</th><th></th></tr></thead><tbody>' + hist.map(function(en){
       return '<tr><td class="mono">'+fmtD(en.data)+'</td><td style="font-size:12px">'+(en.itens || []).map(function(i){ return esc(i.qtd + '× ' + nomeProd(i.pid) + (i.tk !== 'UN' ? ' (' + i.tk + ')' : '')) + (i.devolvido ? ' <span class="pill gray" style="padding:0 6px;font-size:10px">dev. ' + i.devolvido + '</span>' : ''); }).join('<br>')+'</td><td style="font-size:12px">'+esc(en.motivo || '')+'</td><td><button class="btn btn-sm" data-act="print-termo" data-id="'+en._id+'">Termo</button></td></tr>';
     }).join('') + '</tbody></table>' : '<div style="color:var(--text-faint);font-size:12.5px">Nenhuma entrega registrada.</div>') +
     '<div class="modal-actions"><button class="btn btn-ghost" data-act="fechar">Fechar</button>' +
     (can('empregados') ? '<button class="btn" data-act="editar-empregado" data-id="'+id+'">Editar</button>' : '') +
+    ((can('entregar') || can('empregados')) && e.ativo !== false ? '<button class="btn btn-danger" data-act="desligar-empregado" data-id="'+id+'">Desligar e devolver EPIs</button>' : '') +
     (can('entregar') && e.ativo !== false ? '<button class="btn btn-primary" data-act="nova-entrega" data-id="'+id+'">+ Nova entrega</button>' : '') + '</div>', 'xwide');
 }
 
@@ -2156,7 +2186,8 @@ function termoHtml(entId){
     '<table class="pr-table"><thead><tr><th>Qtd</th><th>Descrição</th><th>Tam.</th><th>CA</th><th>Validade CA</th><th>Próxima troca</th></tr></thead><tbody>' +
     (en.itens || []).map(function(i){ return '<tr><td>'+i.qtd+'</td><td>'+esc(nomeProd(i.pid))+'</td><td>'+esc(tamLabel(i.tk))+'</td><td>'+esc(i.ca || '—')+'</td><td>'+fmtD(i.validadeCA)+'</td><td>'+fmtD(i.proximaTroca)+'</td></tr>'; }).join('') +
     '</tbody></table><div><b>Data da entrega:</b> '+fmtD(en.data)+' &nbsp; <b>Motivo:</b> '+esc(en.motivo || '')+(en.obs ? ' &nbsp; <b>Obs.:</b> ' + esc(en.obs) : '')+'</div>' +
-    '<div class="pr-sign"><div>'+(en.assinatura ? '<img src="'+en.assinatura+'" alt="">' : '<br><br>')+esc(e.nome)+'<br>Empregado</div><div><br><br>'+esc(en.usuario || '')+'<br>Responsável pela entrega</div></div>';
+    '<div class="pr-sign"><div>'+(en.assinatura ? '<img src="'+en.assinatura+'" alt="">' : '<br><br>')+esc(e.nome)+'<br>Empregado</div><div><br><br>'+esc(en.usuario || '')+'<br>Responsável pela entrega</div></div>' +
+    possePrintHtml(en.empregadoId);
 }
 function doPrint(html){
   $('#print-area').innerHTML = html;
@@ -3775,6 +3806,99 @@ formHandlers['min-planilha'] = function(){
     });
   });
   exportXlsx('estoque-minimo-por-local', rows);
+};
+
+// =====================================================================
+// DEVOLUÇÕES (avulsa, desligamento e troca por tamanho) + TERMO DE DEVOLUÇÃO
+// =====================================================================
+// devolucoes/<id> = {data, ts, empregadoId, motivo, obs, usuario, itens:[{entregaId, idx, pid, tk, qtd, ca, cond, loc}]}
+// cond: 'reutilizar' (bom estado, volta ao estoque) · 'descartar' (gasto / sem condições) · 'nao_devolvido'
+// O termo de devolução só sai quando há itens devolvidos em condições de uso (cond 'reutilizar').
+var COND_DEV = [['reutilizar','Bom estado — volta ao estoque'],['descartar','Gasto / sem condições — descarte'],['nao_devolvido','Não devolvido']];
+
+function registrarDevolucao(empId, motivo, linhas, data, obs){
+  linhas = linhas.filter(function(l){ return l.qtd > 0; });
+  if(!linhas.length) return Promise.resolve(null);
+  var ops = linhas.filter(function(l){ return l.cond === 'reutilizar'; }).map(function(l){ var it = DB.entregas[l.entregaId].itens[l.idx]; return {pid:it.pid, tk:it.tk, loc:l.loc, delta:l.qtd}; });
+  return (ops.length ? applyStock(ops) : Promise.resolve()).then(function(){
+    var p = {}, devId = store.key(), soma = {};
+    linhas.forEach(function(l){
+      var en = DB.entregas[l.entregaId], it = en.itens[l.idx], k = l.entregaId + '/itens/' + l.idx;
+      soma[k] = soma[k] || {dev:+it.devolvido || 0, nao:+it.naoDevolvido || 0};
+      if(l.cond === 'nao_devolvido') soma[k].nao += l.qtd; else soma[k].dev += l.qtd;
+      var tipo = l.cond === 'reutilizar' ? 'devolucao' : (l.cond === 'descartar' ? 'devol_descarte' : 'nao_devolvido');
+      p['movimentos/' + store.key()] = movRecord({data:data, tipo:tipo, pid:it.pid, tk:it.tk, loc:l.cond === 'reutilizar' ? l.loc : (en.loc || l.loc), qtd:l.qtd, empregadoId:empId, entregaId:l.entregaId, devolucaoId:devId,
+        motivo: motivo + (l.cond === 'reutilizar' ? ' — bom estado' : l.cond === 'descartar' ? ' — gasto / sem condições (descarte)' : ' — não devolvido'), obs:obs || ''});
+      l.pid = it.pid; l.tk = it.tk; l.ca = it.ca || '';
+    });
+    Object.keys(soma).forEach(function(k){ p['entregas/' + k + '/devolvido'] = soma[k].dev; if(soma[k].nao) p['entregas/' + k + '/naoDevolvido'] = soma[k].nao; });
+    p['devolucoes/' + devId] = {data:data, ts:nowTs(), empregadoId:empId, motivo:motivo, obs:obs || '', usuario:currentUser.name,
+      itens:linhas.map(function(l){ return {entregaId:l.entregaId, idx:l.idx, pid:l.pid, tk:l.tk, qtd:l.qtd, ca:l.ca, cond:l.cond, loc:l.loc || ''}; })};
+    var nRe = linhas.filter(function(l){ return l.cond === 'reutilizar'; }).length;
+    return save(p, 'Devolução (' + motivo + ')', (DB.empregados[empId] || {}).nome + ' — ' + linhas.length + ' item(ns)').then(function(){ return {id:devId, temTermo:nRe > 0}; });
+  });
+}
+function devTemTermo(d){ return d && (d.itens || []).some(function(i){ return i.cond === 'reutilizar'; }); }
+
+var TEXTO_DEVOLUCAO = 'Declaro ter devolvido à empresa, nesta data, os Equipamentos de Proteção Individual (EPI) e/ou uniformes relacionados abaixo, ' +
+  'em condições de uso, que estavam sob minha guarda e responsabilidade.';
+function termoDevolucaoHtml(devId){
+  var d = DB.devolucoes && DB.devolucoes[devId]; if(!devTemTermo(d)) return '';
+  var e = DB.empregados[d.empregadoId] || {}, its = d.itens.filter(function(i){ return i.cond === 'reutilizar'; });
+  return prHead('Termo de Devolução de EPI e Uniforme') + prEmpInfo(e) +
+    '<div class="pr-text">' + TEXTO_DEVOLUCAO + '</div>' +
+    '<table class="pr-table"><thead><tr><th>Qtd</th><th>Descrição</th><th>Tam.</th><th>CA</th><th>Entregue em</th><th>Condição</th></tr></thead><tbody>' +
+    its.map(function(i){ var en = DB.entregas[i.entregaId] || {}; return '<tr><td>'+i.qtd+'</td><td>'+esc(nomeProd(i.pid))+'</td><td>'+esc(tamLabel(i.tk))+'</td><td>'+esc(i.ca || '—')+'</td><td>'+fmtD(en.data)+'</td><td>Em condições de uso</td></tr>'; }).join('') +
+    '</tbody></table><div><b>Data da devolução:</b> '+fmtD(d.data)+' &nbsp; <b>Motivo:</b> '+esc(d.motivo || '')+(d.obs ? ' &nbsp; <b>Obs.:</b> ' + esc(d.obs) : '')+'</div>' +
+    '<div class="pr-sign"><div><br><br>'+esc(e.nome || '')+'<br>Empregado</div><div><br><br>'+esc(d.usuario || '')+'<br>Responsável pelo recebimento</div></div>';
+}
+function printTermoDevolucao(devId){ var h = termoDevolucaoHtml(devId); if(h) doPrint(h); }
+
+// Itens em posse no termo de recebimento (posição atual)
+function possePrintHtml(empId){
+  var posse = itensEmPosse(empId).sort(function(a, b){ return (a.data || '') < (b.data || '') ? -1 : 1; });
+  if(!posse.length) return '';
+  return '<div class="pr-sub">EPIs e uniformes em posse do empregado (posição em '+fmtD(today())+')</div>' +
+    '<table class="pr-table"><thead><tr><th>Qtd</th><th>Descrição</th><th>Tam.</th><th>CA</th><th>Entregue em</th><th>Próxima troca</th></tr></thead><tbody>' +
+    posse.map(function(x){ return '<tr><td>'+x.aberto+'</td><td>'+esc(nomeProd(x.item.pid))+'</td><td>'+esc(tamLabel(x.item.tk))+'</td><td>'+esc(x.item.ca || '—')+'</td><td>'+fmtD(x.data)+'</td><td>'+fmtD(x.item.proximaTroca)+'</td></tr>'; }).join('') +
+    '</tbody></table>';
+}
+
+// ---------- desligamento: devolve tudo o que está em posse ----------
+function formDesligamento(empId){
+  if(!can('entregar') && !can('empregados')) return;
+  var e = DB.empregados[empId]; if(!e) return;
+  var posse = itensEmPosse(empId);
+  openModal('<div class="modal-title">Desligamento — '+esc(e.nome)+'</div>' +
+    '<div class="modal-sub">'+(posse.length ? 'Informe o que foi devolvido. Só os itens em bom estado voltam ao estoque e entram no termo de devolução; gastos, sem condições de uso ou não devolvidos não geram termo.' : 'Este empregado não tem itens em posse.')+'</div>' +
+    '<div class="modal-grid">' + field('Data do desligamento', '<input type="date" id="dl-data" value="'+today()+'">') + field('Devolver no local', '<select id="dl-loc">'+optList(locaisOpts(), defaultLocal())+'</select>') + '</div>' +
+    (posse.length ? '<table class="items-table" style="margin-top:8px"><thead><tr><th>Item</th><th>Tam.</th><th class="num">Em posse</th><th style="width:90px">Qtd</th><th>Condição</th></tr></thead><tbody>' + posse.map(function(x){
+      return '<tr class="dl-row" data-ent="'+x.entregaId+'" data-idx="'+x.idx+'" data-max="'+x.aberto+'"><td>'+esc(nomeProd(x.item.pid))+'<span class="sub">entregue em '+fmtD(x.data)+'</span></td><td class="mono">'+esc(tamLabel(x.item.tk))+'</td><td class="num">'+x.aberto+'</td>' +
+        '<td><input type="number" class="dl-qtd" min="0" max="'+x.aberto+'" value="'+x.aberto+'"></td><td><select class="dl-cond">'+optList(COND_DEV, 'reutilizar')+'</select></td></tr>';
+    }).join('') + '</tbody></table>' : '') +
+    field('Observação', '<input id="dl-obs">', 'full') +
+    (posse.length ? '<label class="modal-check"><input type="checkbox" id="dl-print" checked> Imprimir o termo de devolução (só com os itens em bom estado)</label>' : '') +
+    '<input type="hidden" id="dl-emp" value="'+empId+'">' + modalActions('Registrar desligamento', 'salvar-desligamento'), 'wide');
+}
+formHandlers['desligar-empregado'] = function(el){ formDesligamento(el.dataset.id); };
+formHandlers['salvar-desligamento'] = function(btn){
+  var empId = $('#dl-emp').value, data = $('#dl-data').value || today(), loc = $('#dl-loc').value, linhas = [], bad = '';
+  $$('#modal-box .dl-row').forEach(function(tr){
+    var q = Math.floor(num($('.dl-qtd', tr).value)), mx = +tr.dataset.max;
+    if(q < 0 || q > mx){ bad = 'Quantidade deve ser entre 0 e ' + mx + '.'; return; }
+    if(q > 0) linhas.push({entregaId:tr.dataset.ent, idx:+tr.dataset.idx, qtd:q, cond:$('.dl-cond', tr).value, loc:loc});
+  });
+  if(bad) return formError(bad);
+  if(linhas.some(function(l){ return l.cond === 'reutilizar'; }) && !loc) return formError('Escolha o local para onde os itens voltam.');
+  var imprimir = $('#dl-print') && $('#dl-print').checked, obs = $('#dl-obs').value.trim();
+  busy(btn, true);
+  registrarDevolucao(empId, 'Desligamento', linhas, data, obs).then(function(r){
+    var p = {}; p['empregados/' + empId + '/ativo'] = false; p['empregados/' + empId + '/desligadoEm'] = data;
+    return save(p, 'Empregado desligado', (DB.empregados[empId] || {}).nome).then(function(){ return r; });
+  }).then(function(r){
+    closeModal(); toast('Desligamento registrado.' + (r && !r.temTermo ? ' Nenhum item em bom estado: sem termo de devolução.' : ''));
+    if(r && r.temTermo && imprimir) setTimeout(function(){ printTermoDevolucao(r.id); }, 150);
+  }).catch(function(e){ busy(btn, false); formError(e.message); });
 };
 
 LOGO_SRC = document.querySelector('.brand-logo-img').getAttribute('src');

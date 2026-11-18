@@ -44,7 +44,7 @@ var USER_ROLES = [
 // HELPERS
 // =====================================================================
 var FB_ON = !!(firebaseConfig.apiKey && firebaseConfig.apiKey !== 'COLE_AQUI' && firebaseConfig.databaseURL);
-var COLS = ['produtos','saldos','movimentos','entregas','empregados','empresas','cargos','locais','compras','clientes','config','logs'];
+var COLS = ['produtos','saldos','movimentos','entregas','devolucoes','empregados','empresas','cargos','locais','compras','clientes','config','logs'];
 var DB_LOADED = {};
 var DB = {}; COLS.forEach(function(c){ DB[c] = {}; });
 
@@ -84,9 +84,10 @@ var MOV_TIPOS = {
   transf_entrada:{label:'Transf. entrada',cls:'gray', sinal: 1},
   baixa:         {label:'Baixa',         cls:'red',   sinal:-1},
   devol_descarte:{label:'Devolução (descarte)', cls:'gray', sinal:0},
+  nao_devolvido: {label:'Não devolvido', cls:'red', sinal:0},
   carga_inicial: {label:'Saldo inicial', cls:'gray',  sinal: 1}
 };
-var MOTIVOS_ENTREGA = ['Primeira entrega (admissão)','Troca por desgaste','Troca por vencimento da vida útil','Perda / extravio','Dano / quebra','Mudança de função','Outros'];
+var MOTIVOS_ENTREGA = ['Primeira entrega (admissão)','Troca por tamanho','Troca por desgaste','Troca por vencimento da vida útil','Perda / extravio','Dano / quebra','Mudança de função','Outros'];
 var MOTIVOS_BAIXA = ['CA vencido','Produto danificado','Perda / extravio','Descarte de devolução','Validade do produto vencida','Outros'];
 var MOTIVOS_AJUSTE = ['Inventário / contagem','Correção de lançamento','Outros'];
 

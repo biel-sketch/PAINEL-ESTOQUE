@@ -163,7 +163,7 @@ function itensEmPosse(empId){
     if(en.cancelada || (empId && en.empregadoId !== empId)) return;
     (en.itens || []).forEach(function(it, idx){
       if(!it) return;
-      var aberto = (+it.qtd || 0) - (+it.devolvido || 0);
+      var aberto = (+it.qtd || 0) - (+it.devolvido || 0) - (+it.naoDevolvido || 0);
       if(aberto > 0 && !it.substituidoPor) out.push({entregaId: en._id, idx: idx, empregadoId: en.empregadoId, data: en.data, item: it, aberto: aberto});
     });
   });
